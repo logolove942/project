@@ -1,14 +1,27 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
-import { createRequirement, createSpec, fetchRequirements } from "../api/client";
-import type { RequirementWithSpecs } from "../types";
+import { computed, onMounted, reactive, ref } from "vue";
+import { createRequirement, createSpec, fetchAccounts, fetchRequirements } from "../api/client";
+import type { Account, RequirementWithSpecs } from "../types";
 import QuickAddTask from "./QuickAddTask.vue";
 
-const props = defineProps<{ apiBaseUrl: string }>();
+const props = defineProps<{ apiBaseUrl: string; currentAccount: Account }>();
+
+// issue #51：需求/規格/任務的建立動作僅限管理職——後端本身已經會擋 403，
+// 這裡只是避免非管理職看到一個註定失敗的按鈕。
+const isAdmin = computed(() => props.currentAccount.role === "管理職");
 
 const requirements = ref<RequirementWithSpecs[]>([]);
 const loading = ref(true);
 const error = ref<string | null>(null);
+const accountOptions = ref<Account[]>([]);
+
+async function loadAccountOptions() {
+  try {
+    accountOptions.value = await fetchAccounts(props.apiBaseUrl);
+  } catch {
+    // 帳號清單載入失敗不影響需求/規格檢視，QuickAddTask 的指派下拉會顯示空清單。
+  }
+}
 
 const newTitle = ref("");
 const submitting = ref(false);
@@ -87,6 +100,7 @@ function onTaskCreated() {
 }
 
 onMounted(load);
+onMounted(loadAccountOptions);
 
 defineExpose({ reload: load });
 </script>
@@ -95,7 +109,7 @@ defineExpose({ reload: load });
   <div class="requirements-view" data-testid="requirements-view">
     <h2>需求/規格管理</h2>
 
-    <form class="add-form" data-testid="new-requirement-form" @submit.prevent="submitNewRequirement">
+    <form v-if="isAdmin" class="add-form" data-testid="new-requirement-form" @submit.prevent="submitNewRequirement">
       <input
         v-model="newTitle"
         type="text"
@@ -105,6 +119,9 @@ defineExpose({ reload: load });
       <button type="submit" :disabled="submitting" data-testid="new-requirement-submit">+ 新增需求</button>
       <p v-if="submitError" data-testid="new-requirement-error">{{ submitError }}</p>
     </form>
+    <p v-else class="readonly-note" data-testid="requirements-readonly-note">
+      僅管理職可以新增需求、規格與任務；可以檢視進度、建立提醒與報工。
+    </p>
 
     <p v-if="loading" data-testid="requirements-loading">載入中…</p>
     <p v-else-if="error" data-testid="requirements-error">{{ error }}</p>
@@ -121,8 +138,10 @@ defineExpose({ reload: load });
             <div class="spec-row">
               <span>{{ spec.title }}</span>
               <QuickAddTask
+                v-if="isAdmin"
                 :api-base-url="apiBaseUrl"
                 :specs="[{ id: spec.id, label: spec.title }]"
+                :accounts="accountOptions"
                 :initial-spec-id="spec.id"
                 @created="onTaskCreated"
               />
@@ -130,38 +149,40 @@ defineExpose({ reload: load });
           </li>
         </ul>
 
-        <button
-          v-if="!specForm(requirement.id).show"
-          type="button"
-          :data-testid="`new-spec-btn-${requirement.id}`"
-          @click="specForm(requirement.id).show = true"
-        >
-          + 新增規格
-        </button>
-        <form
-          v-else
-          class="add-form"
-          :data-testid="`new-spec-form-${requirement.id}`"
-          @submit.prevent="submitNewSpec(requirement.id)"
-        >
-          <input
-            v-model="specForm(requirement.id).title"
-            type="text"
-            placeholder="新規格標題"
-            :data-testid="`new-spec-title-${requirement.id}`"
-          />
+        <template v-if="isAdmin">
           <button
-            type="submit"
-            :disabled="specForm(requirement.id).submitting"
-            :data-testid="`new-spec-submit-${requirement.id}`"
+            v-if="!specForm(requirement.id).show"
+            type="button"
+            :data-testid="`new-spec-btn-${requirement.id}`"
+            @click="specForm(requirement.id).show = true"
           >
-            送出
+            + 新增規格
           </button>
-          <button type="button" @click="specForm(requirement.id).show = false">取消</button>
-          <p v-if="specForm(requirement.id).error" :data-testid="`new-spec-error-${requirement.id}`">
-            {{ specForm(requirement.id).error }}
-          </p>
-        </form>
+          <form
+            v-else
+            class="add-form"
+            :data-testid="`new-spec-form-${requirement.id}`"
+            @submit.prevent="submitNewSpec(requirement.id)"
+          >
+            <input
+              v-model="specForm(requirement.id).title"
+              type="text"
+              placeholder="新規格標題"
+              :data-testid="`new-spec-title-${requirement.id}`"
+            />
+            <button
+              type="submit"
+              :disabled="specForm(requirement.id).submitting"
+              :data-testid="`new-spec-submit-${requirement.id}`"
+            >
+              送出
+            </button>
+            <button type="button" @click="specForm(requirement.id).show = false">取消</button>
+            <p v-if="specForm(requirement.id).error" :data-testid="`new-spec-error-${requirement.id}`">
+              {{ specForm(requirement.id).error }}
+            </p>
+          </form>
+        </template>
       </li>
     </ul>
   </div>
@@ -211,6 +232,15 @@ defineExpose({ reload: load });
   color: #b3261e;
   font-size: 12px;
   margin: 0;
+}
+
+.readonly-note {
+  background: #f5f6f8;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #6b7280;
+  margin-bottom: 16px;
 }
 
 .requirement-list {

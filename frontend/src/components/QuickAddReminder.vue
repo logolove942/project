@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { createReminder } from "../api/client";
-import type { Priority } from "../types";
+import type { Account, Priority } from "../types";
 
 const props = defineProps<{
   apiBaseUrl: string;
   viewerName: string;
   specs: { id: string; label: string }[];
+  accounts: Account[];
 }>();
 const emit = defineEmits<{ created: [] }>();
 
@@ -67,12 +68,11 @@ async function submit() {
     </button>
     <form v-else class="add-form" data-testid="quick-add-reminder-form" @submit.prevent="submit">
       <input v-model="title" type="text" placeholder="標題" data-testid="quick-add-reminder-title" />
-      <input
-        v-model="assignedTo"
-        type="text"
-        placeholder="對象"
-        data-testid="quick-add-reminder-assignee"
-      />
+      <select v-model="assignedTo" data-testid="quick-add-reminder-assignee">
+        <option v-for="account in accounts" :key="account.id" :value="account.name">
+          {{ account.name }}
+        </option>
+      </select>
       <select v-model="specId" data-testid="quick-add-reminder-spec">
         <option value="">未關聯規格</option>
         <option v-for="spec in specs" :key="spec.id" :value="spec.id">{{ spec.label }}</option>

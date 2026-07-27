@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import {
   completeTask,
+  fetchAccounts,
   fetchMonthlyStats,
   fetchRequirements,
   fetchScopedTodoList,
@@ -11,12 +12,12 @@ import {
   type MonthlyStats,
 } from "../api/client";
 import { currentMonth, today } from "../dateUtils";
-import type { TodoItem } from "../types";
+import type { Account, TodoItem } from "../types";
 import DetailPanel from "./DetailPanel.vue";
 import QuickAddReminder from "./QuickAddReminder.vue";
 import QuickAddTask from "./QuickAddTask.vue";
 
-const props = defineProps<{ apiBaseUrl: string }>();
+const props = defineProps<{ apiBaseUrl: string; currentAccount: Account }>();
 
 const items = ref<TodoItem[]>([]);
 const loading = ref(true);
@@ -30,15 +31,18 @@ function selectItem(item: TodoItem) {
 }
 
 // 身分切換：viewer 是誰在問（決定雜事的可見性），scopeMode 決定要看誰的範圍。
-// 這一輪還沒有登入機制，viewerName 先用 localStorage 記住，不用每次重新整理都重打一次。
-const VIEWER_NAME_STORAGE_KEY = "task-reminder:viewerName";
-const viewerName = ref(localStorage.getItem(VIEWER_NAME_STORAGE_KEY) ?? "");
+// 登入後身分就是登入帳號，不再是自由輸入（issue #49）；「某位同仁」改成從帳號名單選（issue #49）。
+const viewerName = computed(() => props.currentAccount.name);
 const scopeMode = ref<"self" | "person" | "all">("all");
 const scopePersonName = ref("");
+const accountOptions = ref<Account[]>([]);
 
-function onViewerNameChange() {
-  localStorage.setItem(VIEWER_NAME_STORAGE_KEY, viewerName.value);
-  load();
+async function loadAccountOptions() {
+  try {
+    accountOptions.value = await fetchAccounts(props.apiBaseUrl);
+  } catch {
+    // 帳號清單載入失敗不影響看板主要功能，「某位同仁」下拉會顯示空清單。
+  }
 }
 
 const scopeParam = computed<"all" | string>(() => {
@@ -170,6 +174,7 @@ async function onComplete(item: TodoItem) {
 
 onMounted(load);
 onMounted(loadSpecOptions);
+onMounted(loadAccountOptions);
 
 defineExpose({ reload: load });
 </script>
@@ -177,16 +182,7 @@ defineExpose({ reload: load });
 <template>
   <div class="kanban-board">
     <div class="identity-bar">
-      <label>
-        我是
-        <input
-          v-model="viewerName"
-          type="text"
-          data-testid="viewer-input"
-          placeholder="輸入你的名字"
-          @change="onViewerNameChange"
-        />
-      </label>
+      <span class="viewer-label" data-testid="viewer-name">我是 {{ viewerName }}</span>
       <div class="scope-tabs">
         <button
           type="button"
@@ -212,14 +208,17 @@ defineExpose({ reload: load });
         >
           某位同仁
         </button>
-        <input
+        <select
           v-if="scopeMode === 'person'"
           v-model="scopePersonName"
-          type="text"
-          data-testid="scope-person-input"
-          placeholder="輸入同仁姓名"
+          data-testid="scope-person-select"
           @change="load"
-        />
+        >
+          <option value="">選擇同仁</option>
+          <option v-for="account in accountOptions" :key="account.id" :value="account.name">
+            {{ account.name }}
+          </option>
+        </select>
       </div>
       <div class="type-filters">
         <button
@@ -240,9 +239,10 @@ defineExpose({ reload: load });
         :api-base-url="apiBaseUrl"
         :viewer-name="viewerName"
         :specs="specOptions"
+        :accounts="accountOptions"
         @created="load"
       />
-      <QuickAddTask :api-base-url="apiBaseUrl" :specs="specOptions" @created="load" />
+      <QuickAddTask :api-base-url="apiBaseUrl" :specs="specOptions" :accounts="accountOptions" @created="load" />
     </div>
 
     <div v-if="monthlyStats" class="monthly-stats" data-testid="monthly-stats">
@@ -332,6 +332,7 @@ defineExpose({ reload: load });
           :api-base-url="apiBaseUrl"
           :item-id="selectedItem.id"
           :kind="selectedItem.kind"
+          :accounts="accountOptions"
           @close="selectedItem = null"
           @changed="load"
           @promoted="(taskId) => (selectedItem = { id: taskId, kind: 'task' })"
@@ -460,12 +461,15 @@ defineExpose({ reload: load });
   font-weight: 600;
 }
 
-.identity-bar input[type="text"] {
+.viewer-label {
+  font-weight: 500;
+}
+
+.scope-tabs select {
   border: 1px solid #e2e4e9;
   border-radius: 6px;
   padding: 4px 8px;
-  font-size: 13px;
-  margin-left: 4px;
+  font-size: 12px;
 }
 
 .scope-tabs,

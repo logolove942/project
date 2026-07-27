@@ -4,13 +4,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { waitFor } from "../testSupport";
+import { loginForTest, registerAccountForTest, waitFor } from "../testSupport";
+import type { Account } from "../types";
 import RequirementsView from "./RequirementsView.vue";
 
 describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任務", () => {
   let service: TaskService;
   let server: Server;
   let baseUrl: string;
+  let currentAccount: Account;
   let wrapper: VueWrapper | undefined;
   let requirementId: string;
 
@@ -19,6 +21,7 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
     const requirement = service.createRequirement("需求A");
     requirementId = requirement.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
+    currentAccount = await loginForTest(baseUrl); // 第一個註冊的帳號 -> 管理職，看得到新增動作
   });
 
   afterEach(async () => {
@@ -27,7 +30,7 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
   });
 
   async function mountAndWait() {
-    wrapper = mount(RequirementsView, { props: { apiBaseUrl: baseUrl } });
+    wrapper = mount(RequirementsView, { props: { apiBaseUrl: baseUrl, currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="requirements-loading"]').exists());
   }
 
@@ -54,6 +57,7 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
 
   it("creates a task directly under an existing spec, pre-selected, with no spec picker needed", async () => {
     const spec = service.createSpec(requirementId, "規格A-1");
+    await registerAccountForTest(baseUrl, "阿凱"); // issue #50：指派對象下拉需要真的存在的帳號
     await mountAndWait();
     await waitFor(() => wrapper!.find(`[data-testid="spec-${spec.id}"]`).exists());
 
@@ -61,6 +65,12 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
     // 因為只有這一份規格可選（已預先選定），不需要再手動選規格。
     await wrapper!.find(`[data-testid="spec-${spec.id}"] [data-testid="quick-add-task-title"]`).setValue(
       "撰寫規格文件",
+    );
+    await waitFor(
+      () =>
+        wrapper!
+          .find(`[data-testid="spec-${spec.id}"] [data-testid="quick-add-task-assignee-0"]`)
+          .findAll("option").length > 1,
     );
     await wrapper!
       .find(`[data-testid="spec-${spec.id}"] [data-testid="quick-add-task-assignee-0"]`)

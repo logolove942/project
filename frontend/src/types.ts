@@ -83,3 +83,11 @@ export interface ReworkRound {
   startedAt: string;
   endedAt?: string;
 }
+
+export type Role = "管理職" | "一般同仁";
+
+export interface Account {
+  id: string;
+  name: string;
+  role: Role;
+}

@@ -4,18 +4,21 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { waitFor } from "../testSupport";
+import { loginForTest, waitFor } from "../testSupport";
+import type { Account } from "../types";
 import KanbanBoard from "./KanbanBoard.vue";
 
 describe("KanbanBoard", () => {
   let service: TaskService;
   let server: Server;
   let baseUrl: string;
+  let currentAccount: Account;
   let wrapper: VueWrapper | undefined;
 
   beforeEach(async () => {
     service = createTaskService();
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
+    currentAccount = await loginForTest(baseUrl);
   });
 
   afterEach(async () => {
@@ -24,7 +27,7 @@ describe("KanbanBoard", () => {
   });
 
   it("shows a loading state before the todo list arrives", () => {
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl } });
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
     expect(wrapper.find('[data-testid="loading"]').exists()).toBe(true);
   });
 
@@ -51,7 +54,7 @@ describe("KanbanBoard", () => {
       title: "提醒C",
     });
 
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl } });
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
 
     expect(wrapper.find(`[data-testid="card-${devTask.id}"]`).text()).toContain("開發任務A");
@@ -69,14 +72,14 @@ describe("KanbanBoard", () => {
       assignees: [{ person: "小美" }],
     });
 
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl } });
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
 
     expect(wrapper.find(`[data-testid="card-${task.id}"]`).text()).toContain(spec.id);
   });
 
   it("shows an error message when the API call fails", async () => {
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: "http://localhost:1" } });
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: "http://localhost:1", currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
 
     expect(wrapper.find('[data-testid="error"]').exists()).toBe(true);

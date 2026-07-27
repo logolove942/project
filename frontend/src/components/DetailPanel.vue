@@ -14,12 +14,13 @@ import {
   resumeTask,
   startTask,
 } from "../api/client";
-import type { Reminder, Task, WorkLogEntry } from "../types";
+import type { Account, Reminder, Task, WorkLogEntry } from "../types";
 
 const props = defineProps<{
   apiBaseUrl: string;
   itemId: string;
   kind: "task" | "reminder";
+  accounts: Account[];
 }>();
 const emit = defineEmits<{ close: []; changed: []; promoted: [taskId: string] }>();
 
@@ -212,7 +213,12 @@ defineExpose({ reload: load });
 
       <h3>新增報工</h3>
       <form @submit.prevent="submitWorkLog">
-        <input v-model="person" type="text" placeholder="人員" data-testid="worklog-person" />
+        <select v-model="person" data-testid="worklog-person">
+          <option value="">選擇人員</option>
+          <option v-for="account in accounts" :key="account.id" :value="account.name">
+            {{ account.name }}
+          </option>
+        </select>
         <input v-model="date" type="date" data-testid="worklog-date" />
         <input
           v-model.number="hours"

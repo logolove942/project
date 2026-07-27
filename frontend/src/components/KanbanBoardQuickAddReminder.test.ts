@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { waitFor } from "../testSupport";
+import { loginForTest, registerAccountForTest, waitFor } from "../testSupport";
+import type { Account } from "../types";
 import KanbanBoard from "./KanbanBoard.vue";
 
 describe("KanbanBoard - 快速新增提醒/雜事", () => {
@@ -23,11 +24,10 @@ describe("KanbanBoard - 快速新增提醒/雜事", () => {
     await closeServer(server);
   });
 
+  // issue #49：身分就是登入帳號，不再是自由輸入的「我是」——用這個名字登入即可。
   async function mountAndSetViewer(viewer: string) {
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl } });
-    await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
-    await wrapper.find('[data-testid="viewer-input"]').setValue(viewer);
-    await wrapper.find('[data-testid="viewer-input"]').trigger("change");
+    const currentAccount: Account = await loginForTest(baseUrl, viewer, "pw");
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
   }
 
@@ -45,10 +45,14 @@ describe("KanbanBoard - 快速新增提醒/雜事", () => {
   it("creates a reminder assigned to someone else, linked to a spec", async () => {
     const requirement = service.createRequirement("需求A");
     const spec = service.createSpec(requirement.id, "規格A");
+    await registerAccountForTest(baseUrl, "阿凱"); // issue #50：對象下拉需要真的存在的帳號
     await mountAndSetViewer("小美");
 
     await wrapper!.find('[data-testid="quick-add-reminder-btn"]').trigger("click");
     await wrapper!.find('[data-testid="quick-add-reminder-title"]').setValue("規格欄位確認");
+    await waitFor(
+      () => wrapper!.find('[data-testid="quick-add-reminder-assignee"]').findAll("option").length > 1,
+    );
     await wrapper!.find('[data-testid="quick-add-reminder-assignee"]').setValue("阿凱");
     await waitFor(() => wrapper!.find('[data-testid="quick-add-reminder-spec"]').findAll("option").length > 1);
     await wrapper!.find('[data-testid="quick-add-reminder-spec"]').setValue(spec.id);

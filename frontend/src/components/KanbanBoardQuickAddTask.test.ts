@@ -4,13 +4,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { waitFor } from "../testSupport";
+import { loginForTest, registerAccountForTest, waitFor } from "../testSupport";
+import type { Account } from "../types";
 import KanbanBoard from "./KanbanBoard.vue";
 
 describe("KanbanBoard - 快速新增任務（可複選指派）", () => {
   let service: TaskService;
   let server: Server;
   let baseUrl: string;
+  let currentAccount: Account;
   let wrapper: VueWrapper | undefined;
   let specId: string;
 
@@ -20,6 +22,9 @@ describe("KanbanBoard - 快速新增任務（可複選指派）", () => {
     const spec = service.createSpec(requirement.id, "規格A");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
+    currentAccount = await loginForTest(baseUrl);
+    await registerAccountForTest(baseUrl, "阿凱"); // issue #50：指派對象下拉需要真的存在的帳號
+    await registerAccountForTest(baseUrl, "小美");
   });
 
   afterEach(async () => {
@@ -28,11 +33,14 @@ describe("KanbanBoard - 快速新增任務（可複選指派）", () => {
   });
 
   async function mountAndOpenForm() {
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl } });
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
     await waitFor(() => wrapper!.find('[data-testid="quick-add-task-btn"]').exists());
     await wrapper!.find('[data-testid="quick-add-task-btn"]').trigger("click");
     await waitFor(() => wrapper!.find('[data-testid="quick-add-task-spec"]').findAll("option").length > 1);
+    await waitFor(
+      () => wrapper!.find('[data-testid="quick-add-task-assignee-0"]').findAll("option").length > 1,
+    );
   }
 
   it("creates a task with a single assignee under the chosen spec", async () => {

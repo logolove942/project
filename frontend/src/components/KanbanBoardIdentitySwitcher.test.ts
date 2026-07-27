@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { waitFor } from "../testSupport";
+import { loginForTest, registerAccountForTest, waitFor } from "../testSupport";
 import KanbanBoard from "./KanbanBoard.vue";
 
 describe("KanbanBoard - 身分切換（我/同仁/全觀）＋全觀擁有者標籤", () => {
@@ -27,8 +27,10 @@ describe("KanbanBoard - 身分切換（我/同仁/全觀）＋全觀擁有者標
     await closeServer(server);
   });
 
-  async function mountAndWait() {
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl } });
+  // issue #49：身分就是登入帳號——用哪個名字登入，viewerName 就是誰；不再是掛載後可自由輸入的欄位。
+  async function mountAndWait(viewerName = "test-user") {
+    const currentAccount = await loginForTest(baseUrl, viewerName, "pw");
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
   }
 
@@ -60,11 +62,13 @@ describe("KanbanBoard - 身分切換（我/同仁/全觀）＋全觀擁有者標
       title: "阿凱的任務",
       assignees: [{ person: "阿凱" }],
     });
+    await registerAccountForTest(baseUrl, "小美"); // issue #49：某位同仁下拉需要真的存在的帳號
     await mountAndWait();
 
     await wrapper!.find('[data-testid="scope-person-btn"]').trigger("click");
-    await wrapper!.find('[data-testid="scope-person-input"]').setValue("小美");
-    await wrapper!.find('[data-testid="scope-person-input"]').trigger("change");
+    await waitFor(() => wrapper!.find('[data-testid="scope-person-select"]').findAll("option").length > 1);
+    await wrapper!.find('[data-testid="scope-person-select"]').setValue("小美");
+    await wrapper!.find('[data-testid="scope-person-select"]').trigger("change");
     // xiaomei 的卡片一開始（全觀）就在，等阿凱的卡片消失才代表重新查詢真的發生了
     await waitFor(() => !wrapper!.find(`[data-testid="card-${aKaiTask.id}"]`).exists());
 
@@ -78,10 +82,8 @@ describe("KanbanBoard - 身分切換（我/同仁/全觀）＋全觀擁有者標
       assignedTo: "阿凱",
       title: "阿凱的雜事",
     });
-    await mountAndWait();
+    await mountAndWait("小美");
 
-    await wrapper!.find('[data-testid="viewer-input"]').setValue("小美");
-    await wrapper!.find('[data-testid="viewer-input"]').trigger("change");
     await wrapper!.find('[data-testid="scope-self"]').trigger("click");
     await waitFor(() => wrapper!.find(`[data-testid="card-${myChore.id}"]`).exists());
 
@@ -109,10 +111,8 @@ describe("KanbanBoard - 身分切換（我/同仁/全觀）＋全觀擁有者標
       title: "任務A",
       assignees: [{ person: "小美" }],
     });
-    await mountAndWait();
+    await mountAndWait("阿凱");
 
-    await wrapper!.find('[data-testid="viewer-input"]').setValue("阿凱");
-    await wrapper!.find('[data-testid="viewer-input"]').trigger("change");
     await wrapper!.find('[data-testid="scope-self"]').trigger("click");
     await waitFor(() => wrapper!.find(`[data-testid="loading"]`).exists() === false);
 

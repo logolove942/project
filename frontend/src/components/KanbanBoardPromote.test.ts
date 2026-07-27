@@ -4,13 +4,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { waitFor } from "../testSupport";
+import { loginForTest, waitFor } from "../testSupport";
+import type { Account } from "../types";
 import KanbanBoard from "./KanbanBoard.vue";
 
 describe("KanbanBoard - 詳情面板：提醒升級為正式任務", () => {
   let service: TaskService;
   let server: Server;
   let baseUrl: string;
+  let currentAccount: Account;
   let wrapper: VueWrapper | undefined;
   let specId: string;
 
@@ -20,6 +22,7 @@ describe("KanbanBoard - 詳情面板：提醒升級為正式任務", () => {
     const spec = service.createSpec(requirement.id, "S");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
+    currentAccount = await loginForTest(baseUrl);
   });
 
   afterEach(async () => {
@@ -28,7 +31,7 @@ describe("KanbanBoard - 詳情面板：提醒升級為正式任務", () => {
   });
 
   async function mountAndSelect(itemId: string) {
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl } });
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
     await wrapper.find(`[data-testid="card-${itemId}"]`).trigger("click");
     await waitFor(() => !wrapper!.find('[data-testid="detail-loading"]').exists());

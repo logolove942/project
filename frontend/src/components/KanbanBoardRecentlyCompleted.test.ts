@@ -4,13 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { waitFor } from "../testSupport";
+import { loginForTest, waitFor } from "../testSupport";
+import type { Account } from "../types";
 import KanbanBoard from "./KanbanBoard.vue";
 
 describe("KanbanBoard - 「剛完成（今天）」收合區塊", () => {
   let service: TaskService;
   let server: Server;
   let baseUrl: string;
+  let currentAccount: Account;
   let wrapper: VueWrapper | undefined;
   let specId: string;
 
@@ -24,6 +26,7 @@ describe("KanbanBoard - 「剛完成（今天）」收合區塊", () => {
     const spec = service.createSpec(requirement.id, "S");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
+    currentAccount = await loginForTest(baseUrl);
   });
 
   afterEach(async () => {
@@ -33,7 +36,7 @@ describe("KanbanBoard - 「剛完成（今天）」收合區塊", () => {
   });
 
   async function mountAndWait() {
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl } });
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
   }
 

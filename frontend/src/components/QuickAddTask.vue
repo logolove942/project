@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { createTask } from "../api/client";
-import type { Priority, TaskAssignee } from "../types";
+import type { Account, Priority, TaskAssignee } from "../types";
 
 const props = withDefaults(
   defineProps<{
     apiBaseUrl: string;
     specs: { id: string; label: string }[];
+    accounts: Account[];
     initialSpecId?: string;
     startOpen?: boolean;
   }>(),
@@ -102,12 +103,12 @@ async function submit() {
 
       <div class="assignees">
         <div v-for="(_, index) in assignees" :key="index" class="assignee-row">
-          <input
-            v-model="assignees[index]"
-            type="text"
-            placeholder="指派對象"
-            :data-testid="`quick-add-task-assignee-${index}`"
-          />
+          <select v-model="assignees[index]" :data-testid="`quick-add-task-assignee-${index}`">
+            <option value="">選擇指派對象</option>
+            <option v-for="account in accounts" :key="account.id" :value="account.name">
+              {{ account.name }}
+            </option>
+          </select>
           <button
             v-if="assignees.length > 1"
             type="button"

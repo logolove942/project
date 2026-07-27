@@ -4,13 +4,15 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { waitFor } from "../testSupport";
+import { loginForTest, waitFor } from "../testSupport";
+import type { Account } from "../types";
 import KanbanBoard from "./KanbanBoard.vue";
 
 describe("KanbanBoard - 類型篩選（全部/任務/提醒/雜事）", () => {
   let service: TaskService;
   let server: Server;
   let baseUrl: string;
+  let currentAccount: Account;
   let wrapper: VueWrapper | undefined;
   let taskId: string;
   let reminderId: string;
@@ -37,7 +39,8 @@ describe("KanbanBoard - 類型篩選（全部/任務/提醒/雜事）", () => {
     service.logReminderWork(chore.id, { person: "小美", date: "2026-07-27", hours: 1 }); // 讓雜事在全觀下可見
 
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl } });
+    currentAccount = await loginForTest(baseUrl);
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
   });
 
