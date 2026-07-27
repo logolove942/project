@@ -1,4 +1,6 @@
-import express, { type Express, type Request } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
+import { createAccountService, type Account, type AccountService } from "../domain/accountService.js";
+import { createSessionService, type SessionService } from "../domain/sessionService.js";
 import type { Scope } from "../domain/types.js";
 import { createTaskService, type TaskService } from "../domain/taskService.js";
 import { errorHandler } from "./errorHandler.js";
@@ -9,15 +11,99 @@ function parseScope(req: Request): Scope {
   return !scopeParam || scopeParam === "all" ? "all" : { person: String(scopeParam) };
 }
 
-export function createApp(service: TaskService = createTaskService()): Express {
+// 掛在 req 上的登入帳號；authMiddleware 之後的所有 route handler 都可以讀取。
+export interface AuthedRequest extends Request {
+  account: Account;
+}
+
+function bearerToken(req: Request): string | undefined {
+  const header = req.header("authorization");
+  return header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
+}
+
+// issue #47：需求/規格/任務建立與帳號升級專屬管理職；其餘既有路由不受影響，任何登入帳號都能呼叫。
+function requireManagement(req: Request, res: Response, next: NextFunction) {
+  if ((req as AuthedRequest).account.role !== "管理職") {
+    res.status(403).json({ error: "權限不足：僅管理職可以執行此操作" });
+    return;
+  }
+  next();
+}
+
+export function createApp(
+  service: TaskService = createTaskService(),
+  accountService: AccountService = createAccountService(),
+  sessionService: SessionService = createSessionService(),
+): Express {
   const app = express();
+
+  // 前端（Vite dev server）跟後端在開發環境是不同 origin，沒有這段瀏覽器會直接擋下所有請求
+  // （Node 的 fetch/測試環境不會套用 CORS，所以這個問題不會反映在既有測試裡）。
+  // 內部工具、無需帳密以外的驗證機制，允許任意 origin 帶 Authorization header 是可接受的取捨。
+  app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === "OPTIONS") {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
+
   app.use(express.json());
+
+  // issue #45：帳號註冊——這張票不含 session，註冊完不會自動登入（登入見 issue #46）。
+  app.post("/auth/register", (req, res) => {
+    const { name, password } = req.body;
+    res.status(201).json(accountService.register(name, password));
+  });
+
+  // issue #46：帳號不存在或密碼錯誤回傳同一種通用錯誤訊息，不讓人分辨是哪個環節錯。
+  app.post("/auth/login", (req, res) => {
+    const { name, password } = req.body;
+    const account = accountService.verifyCredentials(name, password);
+    if (!account) {
+      res.status(401).json({ error: "帳號不存在或密碼錯誤" });
+      return;
+    }
+    const token = sessionService.createSession(account.id);
+    res.json({ token, account });
+  });
+
+  // issue #46：除了上面兩個路由，其餘所有路由都要求帶有效的 Bearer token。
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const token = bearerToken(req);
+    const accountId = token ? sessionService.resolveToken(token) : undefined;
+    if (!accountId) {
+      res.status(401).json({ error: "需要登入" });
+      return;
+    }
+    (req as AuthedRequest).account = accountService.getAccount(accountId);
+    next();
+  });
+
+  app.post("/auth/logout", (req, res) => {
+    const token = bearerToken(req);
+    if (token) sessionService.invalidate(token);
+    res.status(204).send();
+  });
+
+  // 供前端各處的人名下拉選單使用（issue #49/#50）；不回傳密碼雜湊。
+  app.get("/accounts", (_req, res) => {
+    res.json(accountService.listAccounts());
+  });
+
+  // issue #47：管理職專屬，把指定帳號的角色設為管理職。
+  app.post("/accounts/:id/promote", requireManagement, (req, res) => {
+    res.json(accountService.promote(String(req.params.id)));
+  });
 
   app.get("/requirements", (_req, res) => {
     res.json(service.listRequirements());
   });
 
-  app.post("/requirements", (req, res) => {
+  app.post("/requirements", requireManagement, (req, res) => {
     res.status(201).json(service.createRequirement(req.body.title));
   });
 
@@ -29,17 +115,17 @@ export function createApp(service: TaskService = createTaskService()): Express {
     res.json(service.setRequirementStatus(req.params.id, req.body.status));
   });
 
-  app.post("/requirements/:id/specs", (req, res) => {
-    res.status(201).json(service.createSpec(req.params.id, req.body.title));
+  app.post("/requirements/:id/specs", requireManagement, (req, res) => {
+    res.status(201).json(service.createSpec(String(req.params.id), req.body.title));
   });
 
   app.patch("/specs/:id/status", (req, res) => {
     res.json(service.setSpecStatus(req.params.id, req.body.status));
   });
 
-  app.post("/specs/:id/tasks", (req, res) => {
+  app.post("/specs/:id/tasks", requireManagement, (req, res) => {
     const { type, title, assignees, priority, dueDate } = req.body;
-    res.status(201).json(service.createTask(req.params.id, { type, title, assignees, priority, dueDate }));
+    res.status(201).json(service.createTask(String(req.params.id), { type, title, assignees, priority, dueDate }));
   });
 
   app.get("/tasks/:id", (req, res) => {

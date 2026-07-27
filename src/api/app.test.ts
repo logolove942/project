@@ -5,12 +5,13 @@ import { NotFoundError, ValidationError } from "../domain/errors.js";
 import { createTaskService, type TaskService } from "../domain/taskService.js";
 import { createApp } from "./app.js";
 import { errorHandler } from "./errorHandler.js";
-import { closeServer, listenOnEphemeralPort, readJson } from "./testHelpers.js";
+import { closeServer, createAuthedFetch, listenOnEphemeralPort, readJson, registerAndLogin } from "./testHelpers.js";
 
 describe("API - Express app (createApp)", () => {
   let service: TaskService;
   let server: Server;
   let baseUrl: string;
+  let fetch: typeof globalThis.fetch;
 
   beforeEach(() => {
     service = createTaskService();
@@ -21,6 +22,7 @@ describe("API - Express app (createApp)", () => {
   it("lists requirements over HTTP", async () => {
     service.createRequirement("需求一");
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
+    fetch = createAuthedFetch(await registerAndLogin(baseUrl));
 
     const res = await fetch(`${baseUrl}/requirements`);
     expect(res.status).toBe(200);
@@ -38,6 +40,7 @@ describe("API - Express app (createApp)", () => {
       assignees: [{ person: "小美" }],
     });
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
+    fetch = createAuthedFetch(await registerAndLogin(baseUrl));
 
     const res = await fetch(`${baseUrl}/requirements/${requirement.id}`);
     expect(res.status).toBe(200);
@@ -48,6 +51,7 @@ describe("API - Express app (createApp)", () => {
 
   it("maps a NotFoundError from the domain service to a 404 response", async () => {
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
+    fetch = createAuthedFetch(await registerAndLogin(baseUrl));
 
     const res = await fetch(`${baseUrl}/requirements/missing-id`);
     expect(res.status).toBe(404);
@@ -57,6 +61,7 @@ describe("API - Express app (createApp)", () => {
 
   it("shares a single service instance across all routes on the same app", async () => {
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
+    fetch = createAuthedFetch(await registerAndLogin(baseUrl));
 
     // 直接對傳進 createApp 的 service 實例寫入，驗證 route 看到的是同一個實例
     service.createRequirement("在 service 上直接建立");
@@ -65,6 +70,30 @@ describe("API - Express app (createApp)", () => {
     const body = await readJson(res);
     expect(body).toHaveLength(1);
     expect(body[0].title).toBe("在 service 上直接建立");
+  });
+
+  // 前端（Vite dev server）跟後端開發時是不同 origin；Node 的 fetch 不像瀏覽器會強制套用
+  // CORS，所以這條規則只有真的用瀏覽器打才會被擋下——這裡至少驗證 header 有正確送出。
+  it("sends CORS headers so a real browser on a different origin (the Vite dev server) isn't blocked", async () => {
+    ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
+
+    const res = await fetch(`${baseUrl}/requirements`, { headers: { Origin: "http://localhost:5173" } });
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+  });
+
+  it("responds to a CORS preflight OPTIONS request without requiring auth", async () => {
+    ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
+
+    const res = await fetch(`${baseUrl}/requirements`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://localhost:5173",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization,content-type",
+      },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get("access-control-allow-headers")).toContain("Authorization");
   });
 });
 

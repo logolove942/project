@@ -2,13 +2,14 @@ import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTaskService, type TaskService } from "../domain/taskService.js";
 import { createApp } from "./app.js";
-import { closeServer, listenOnEphemeralPort, readJson } from "./testHelpers.js";
+import { closeServer, createAuthedFetch, listenOnEphemeralPort, readJson, registerAndLogin } from "./testHelpers.js";
 
 describe("API - 任務報工 endpoints（含預計 vs 消耗）", () => {
   let service: TaskService;
   let server: Server;
   let baseUrl: string;
   let taskId: string;
+  let fetch: typeof globalThis.fetch;
 
   beforeEach(async () => {
     service = createTaskService();
@@ -24,6 +25,7 @@ describe("API - 任務報工 endpoints（含預計 vs 消耗）", () => {
     });
     taskId = task.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
+    fetch = createAuthedFetch(await registerAndLogin(baseUrl));
   });
 
   afterEach(() => closeServer(server));

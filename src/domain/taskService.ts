@@ -1,3 +1,4 @@
+import { createDatabase, nextId, type DatabaseSync } from "./database.js";
 import { NotFoundError, ValidationError } from "./errors.js";
 import type {
   LifecycleStatus,
@@ -19,30 +20,177 @@ import type {
 
 const PRIORITY_ORDER: Record<Priority, number> = { 高: 0, 中: 1, 低: 2 };
 
-export function createTaskService() {
-  const requirements = new Map<string, Requirement>();
-  const specs = new Map<string, Spec>();
-  const tasks = new Map<string, Task>();
-  const workLogs = new Map<string, WorkLogEntry>();
-  const reworkRounds = new Map<string, ReworkRound>();
-  const reminders = new Map<string, Reminder>();
-  const reminderWorkLogs = new Map<string, ReminderWorkLogEntry>();
-  // 手動排序覆蓋後的相對順序；新項目不會自動加進來，只會被預設排序附加在後面。
-  const manualOrderSequence: string[] = [];
-  let nextId = 1;
-  const generateId = (prefix: string) => `${prefix}-${nextId++}`;
+const toUndef = <T>(v: T | null): T | undefined => (v === null ? undefined : v);
+
+interface RequirementRow {
+  id: string;
+  title: string;
+  status: string;
+}
+interface SpecRow {
+  id: string;
+  requirement_id: string;
+  title: string;
+  status: string;
+}
+interface TaskRow {
+  id: string;
+  spec_id: string;
+  type: string;
+  title: string;
+  status: string;
+  paused_from: string | null;
+  priority: string;
+  due_date: string | null;
+  closed_date: string | null;
+}
+interface TaskAssigneeRow {
+  task_id: string;
+  person: string;
+  estimated_hours: number | null;
+}
+interface ReworkRoundRow {
+  id: string;
+  task_id: string;
+  round_number: number;
+  started_at: string;
+  ended_at: string | null;
+}
+interface WorkLogRow {
+  id: string;
+  task_id: string;
+  round_id: string;
+  person: string;
+  date: string;
+  hours: number;
+  note: string | null;
+}
+interface ReminderRow {
+  id: string;
+  created_by: string;
+  assigned_to: string;
+  title: string;
+  spec_id: string | null;
+  status: string;
+  priority: string;
+  due_date: string | null;
+  closed_date: string | null;
+}
+interface ReminderWorkLogRow {
+  id: string;
+  reminder_id: string;
+  person: string;
+  date: string;
+  hours: number;
+  note: string | null;
+}
+
+export function createTaskService(db: DatabaseSync = createDatabase()) {
   const today = () => new Date().toISOString().slice(0, 10);
+  const generateId = (prefix: string) => nextId(db, prefix);
+
+  function rowToRequirement(row: RequirementRow): Requirement {
+    return { id: row.id, title: row.title, status: row.status as LifecycleStatus };
+  }
+
+  function rowToSpec(row: SpecRow): Spec {
+    return {
+      id: row.id,
+      requirementId: row.requirement_id,
+      title: row.title,
+      status: row.status as LifecycleStatus,
+    };
+  }
+
+  function getAssignees(taskId: string): TaskAssignee[] {
+    const rows = db
+      .prepare("SELECT * FROM task_assignees WHERE task_id = ? ORDER BY rowid")
+      .all(taskId) as unknown as TaskAssigneeRow[];
+    return rows.map((r) => ({ person: r.person, estimatedHours: toUndef(r.estimated_hours) }));
+  }
+
+  function rowToTask(row: TaskRow): Task {
+    return {
+      id: row.id,
+      specId: row.spec_id,
+      type: row.type as TaskType,
+      title: row.title,
+      assignees: getAssignees(row.id),
+      status: row.status as LifecycleStatus,
+      pausedFrom: toUndef(row.paused_from) as LifecycleStatus | undefined,
+      priority: row.priority as Priority,
+      dueDate: toUndef(row.due_date),
+      closedDate: toUndef(row.closed_date),
+    };
+  }
+
+  function rowToReworkRound(row: ReworkRoundRow): ReworkRound {
+    return {
+      id: row.id,
+      taskId: row.task_id,
+      roundNumber: row.round_number,
+      startedAt: row.started_at,
+      endedAt: toUndef(row.ended_at),
+    };
+  }
+
+  function rowToWorkLog(row: WorkLogRow): WorkLogEntry {
+    return {
+      id: row.id,
+      taskId: row.task_id,
+      roundId: row.round_id,
+      person: row.person,
+      date: row.date,
+      hours: row.hours,
+      note: toUndef(row.note),
+    };
+  }
+
+  function rowToReminder(row: ReminderRow): Reminder {
+    return {
+      id: row.id,
+      createdBy: row.created_by,
+      assignedTo: row.assigned_to,
+      title: row.title,
+      specId: toUndef(row.spec_id),
+      status: row.status as Reminder["status"],
+      priority: row.priority as Priority,
+      dueDate: toUndef(row.due_date),
+      closedDate: toUndef(row.closed_date),
+    };
+  }
+
+  function rowToReminderWorkLog(row: ReminderWorkLogRow): ReminderWorkLogEntry {
+    return {
+      id: row.id,
+      reminderId: row.reminder_id,
+      person: row.person,
+      date: row.date,
+      hours: row.hours,
+      note: toUndef(row.note),
+    };
+  }
+
+  function findTaskRow(taskId: string): TaskRow | undefined {
+    return db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId) as unknown as TaskRow | undefined;
+  }
+
+  function findReminderRow(reminderId: string): ReminderRow | undefined {
+    return db.prepare("SELECT * FROM reminders WHERE id = ?").get(reminderId) as unknown as
+      | ReminderRow
+      | undefined;
+  }
 
   function requireTask(taskId: string): Task {
-    const task = tasks.get(taskId);
-    if (!task) throw new NotFoundError(`Task not found: ${taskId}`);
-    return task;
+    const row = findTaskRow(taskId);
+    if (!row) throw new NotFoundError(`Task not found: ${taskId}`);
+    return rowToTask(row);
   }
 
   function requireReminder(reminderId: string): Reminder {
-    const reminder = reminders.get(reminderId);
-    if (!reminder) throw new NotFoundError(`Reminder not found: ${reminderId}`);
-    return reminder;
+    const row = findReminderRow(reminderId);
+    if (!row) throw new NotFoundError(`Reminder not found: ${reminderId}`);
+    return rowToReminder(row);
   }
 
   function getTask(taskId: string): Task {
@@ -54,41 +202,52 @@ export function createTaskService() {
   }
 
   function requireRequirement(requirementId: string): Requirement {
-    const requirement = requirements.get(requirementId);
-    if (!requirement) throw new NotFoundError(`Requirement not found: ${requirementId}`);
-    return requirement;
+    const row = db.prepare("SELECT * FROM requirements WHERE id = ?").get(requirementId) as unknown as
+      | RequirementRow
+      | undefined;
+    if (!row) throw new NotFoundError(`Requirement not found: ${requirementId}`);
+    return rowToRequirement(row);
   }
 
   function requireSpec(specId: string): Spec {
-    const spec = specs.get(specId);
-    if (!spec) throw new NotFoundError(`Spec not found: ${specId}`);
-    return spec;
+    const row = db.prepare("SELECT * FROM specs WHERE id = ?").get(specId) as unknown as SpecRow | undefined;
+    if (!row) throw new NotFoundError(`Spec not found: ${specId}`);
+    return rowToSpec(row);
   }
 
   function createRequirement(title: string): Requirement {
     const requirement: Requirement = { id: generateId("req"), title, status: "待處理" };
-    requirements.set(requirement.id, requirement);
+    db.prepare("INSERT INTO requirements (id, title, status) VALUES (?, ?, ?)").run(
+      requirement.id,
+      requirement.title,
+      requirement.status,
+    );
     return requirement;
   }
 
   function createSpec(requirementId: string, title: string): Spec {
     requireRequirement(requirementId);
     const spec: Spec = { id: generateId("spec"), requirementId, title, status: "待處理" };
-    specs.set(spec.id, spec);
+    db.prepare("INSERT INTO specs (id, requirement_id, title, status) VALUES (?, ?, ?, ?)").run(
+      spec.id,
+      spec.requirementId,
+      spec.title,
+      spec.status,
+    );
     return spec;
   }
 
   // 規格/需求的狀態由管理職手動設定，系統不驗證、不與底下任務狀態連動。
   function setSpecStatus(specId: string, status: LifecycleStatus): Spec {
-    const spec = requireSpec(specId);
-    spec.status = status;
-    return spec;
+    requireSpec(specId);
+    db.prepare("UPDATE specs SET status = ? WHERE id = ?").run(status, specId);
+    return requireSpec(specId);
   }
 
   function setRequirementStatus(requirementId: string, status: LifecycleStatus): Requirement {
-    const requirement = requireRequirement(requirementId);
-    requirement.status = status;
-    return requirement;
+    requireRequirement(requirementId);
+    db.prepare("UPDATE requirements SET status = ? WHERE id = ?").run(status, requirementId);
+    return requireRequirement(requirementId);
   }
 
   function createTask(
@@ -105,50 +264,61 @@ export function createTaskService() {
     if (params.assignees.length === 0) {
       throw new ValidationError("A task needs at least one assignee");
     }
-    const task: Task = {
-      ...params,
-      id: generateId("task"),
-      specId,
-      status: "待處理",
-      priority: params.priority ?? "中",
-    };
-    tasks.set(task.id, task);
-    const firstRound: ReworkRound = {
+    const id = generateId("task");
+    const status: LifecycleStatus = "待處理";
+    const priority = params.priority ?? "中";
+    db.prepare(
+      `INSERT INTO tasks (id, spec_id, type, title, status, paused_from, priority, due_date, closed_date)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
+    ).run(id, specId, params.type, params.title, status, priority, params.dueDate ?? null);
+    const insertAssignee = db.prepare(
+      "INSERT INTO task_assignees (task_id, person, estimated_hours) VALUES (?, ?, ?)",
+    );
+    for (const assignee of params.assignees) {
+      insertAssignee.run(id, assignee.person, assignee.estimatedHours ?? null);
+    }
+    const round: ReworkRound = {
       id: generateId("round"),
-      taskId: task.id,
+      taskId: id,
       roundNumber: 1,
       startedAt: new Date().toISOString(),
     };
-    reworkRounds.set(firstRound.id, firstRound);
-    return task;
+    db.prepare(
+      "INSERT INTO rework_rounds (id, task_id, round_number, started_at, ended_at) VALUES (?, ?, ?, ?, NULL)",
+    ).run(round.id, round.taskId, round.roundNumber, round.startedAt);
+    return requireTask(id);
   }
 
   function getCurrentRound(taskId: string): ReworkRound {
     requireTask(taskId);
-    const current = [...reworkRounds.values()].find(
-      (r) => r.taskId === taskId && r.endedAt === undefined,
-    );
-    if (!current) throw new NotFoundError(`No active rework round for task: ${taskId}`);
-    return current;
+    const row = db
+      .prepare("SELECT * FROM rework_rounds WHERE task_id = ? AND ended_at IS NULL")
+      .get(taskId) as unknown as ReworkRoundRow | undefined;
+    if (!row) throw new NotFoundError(`No active rework round for task: ${taskId}`);
+    return rowToReworkRound(row);
   }
 
   function getReworkRounds(taskId: string): ReworkRound[] {
     requireTask(taskId);
-    return [...reworkRounds.values()]
-      .filter((r) => r.taskId === taskId)
-      .sort((a, b) => a.roundNumber - b.roundNumber);
+    const rows = db
+      .prepare("SELECT * FROM rework_rounds WHERE task_id = ? ORDER BY round_number")
+      .all(taskId) as unknown as ReworkRoundRow[];
+    return rows.map(rowToReworkRound);
   }
 
   function rejectTask(taskId: string): ReworkRound {
     const current = getCurrentRound(taskId);
-    current.endedAt = new Date().toISOString();
+    const endedAt = new Date().toISOString();
+    db.prepare("UPDATE rework_rounds SET ended_at = ? WHERE id = ?").run(endedAt, current.id);
     const nextRound: ReworkRound = {
       id: generateId("round"),
       taskId,
       roundNumber: current.roundNumber + 1,
       startedAt: new Date().toISOString(),
     };
-    reworkRounds.set(nextRound.id, nextRound);
+    db.prepare(
+      "INSERT INTO rework_rounds (id, task_id, round_number, started_at, ended_at) VALUES (?, ?, ?, ?, NULL)",
+    ).run(nextRound.id, nextRound.taskId, nextRound.roundNumber, nextRound.startedAt);
     return nextRound;
   }
 
@@ -157,8 +327,8 @@ export function createTaskService() {
     if (task.status !== "待處理") {
       throw new ValidationError(`Cannot start a task from status: ${task.status}`);
     }
-    task.status = "進行中";
-    return task;
+    db.prepare("UPDATE tasks SET status = ? WHERE id = ?").run("進行中", taskId);
+    return requireTask(taskId);
   }
 
   function completeTask(taskId: string): Task {
@@ -166,9 +336,8 @@ export function createTaskService() {
     if (task.status !== "進行中") {
       throw new ValidationError(`Cannot complete a task from status: ${task.status}`);
     }
-    task.status = "完成";
-    task.closedDate = today();
-    return task;
+    db.prepare("UPDATE tasks SET status = ?, closed_date = ? WHERE id = ?").run("完成", today(), taskId);
+    return requireTask(taskId);
   }
 
   function pauseTask(taskId: string): Task {
@@ -176,9 +345,8 @@ export function createTaskService() {
     if (task.status !== "待處理" && task.status !== "進行中") {
       throw new ValidationError(`Cannot pause a task from status: ${task.status}`);
     }
-    task.pausedFrom = task.status;
-    task.status = "暫停";
-    return task;
+    db.prepare("UPDATE tasks SET paused_from = ?, status = ? WHERE id = ?").run(task.status, "暫停", taskId);
+    return requireTask(taskId);
   }
 
   function resumeTask(taskId: string): Task {
@@ -186,27 +354,29 @@ export function createTaskService() {
     if (task.status !== "暫停" || task.pausedFrom === undefined) {
       throw new ValidationError(`Cannot resume a task from status: ${task.status}`);
     }
-    task.status = task.pausedFrom;
-    task.pausedFrom = undefined;
-    return task;
+    db.prepare("UPDATE tasks SET status = ?, paused_from = NULL WHERE id = ?").run(task.pausedFrom, taskId);
+    return requireTask(taskId);
   }
 
   function getSpecWithTasks(specId: string): SpecWithTasks {
     const spec = requireSpec(specId);
-    const specTasks = [...tasks.values()].filter((t) => t.specId === specId);
-    return { ...spec, tasks: specTasks };
+    const rows = db
+      .prepare("SELECT * FROM tasks WHERE spec_id = ? ORDER BY rowid")
+      .all(specId) as unknown as TaskRow[];
+    return { ...spec, tasks: rows.map(rowToTask) };
   }
 
   function getRequirement(requirementId: string): RequirementWithSpecs {
     const requirement = requireRequirement(requirementId);
-    const reqSpecs = [...specs.values()]
-      .filter((s) => s.requirementId === requirementId)
-      .map((s) => getSpecWithTasks(s.id));
-    return { ...requirement, specs: reqSpecs };
+    const specRows = db
+      .prepare("SELECT * FROM specs WHERE requirement_id = ? ORDER BY rowid")
+      .all(requirementId) as unknown as SpecRow[];
+    return { ...requirement, specs: specRows.map((s) => getSpecWithTasks(s.id)) };
   }
 
   function listRequirements(): RequirementWithSpecs[] {
-    return [...requirements.values()].map((r) => getRequirement(r.id));
+    const rows = db.prepare("SELECT * FROM requirements ORDER BY rowid").all() as unknown as RequirementRow[];
+    return rows.map((r) => getRequirement(r.id));
   }
 
   function logWork(
@@ -214,27 +384,28 @@ export function createTaskService() {
     entry: { person: string; date: string; hours: number; note?: string },
   ): WorkLogEntry {
     const round = getCurrentRound(taskId);
-    const workLog: WorkLogEntry = {
-      id: generateId("worklog"),
-      taskId,
-      roundId: round.id,
-      ...entry,
-    };
-    workLogs.set(workLog.id, workLog);
+    const workLog: WorkLogEntry = { id: generateId("worklog"), taskId, roundId: round.id, ...entry };
+    db.prepare(
+      "INSERT INTO work_logs (id, task_id, round_id, person, date, hours, note) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    ).run(workLog.id, workLog.taskId, workLog.roundId, workLog.person, workLog.date, workLog.hours, workLog.note ?? null);
     return workLog;
   }
 
   function getWorkLogs(taskId: string): WorkLogEntry[] {
     requireTask(taskId);
-    return [...workLogs.values()].filter((w) => w.taskId === taskId);
+    const rows = db
+      .prepare("SELECT * FROM work_logs WHERE task_id = ? ORDER BY rowid")
+      .all(taskId) as unknown as WorkLogRow[];
+    return rows.map(rowToWorkLog);
   }
 
   function getReworkRoundsWithWorkLogs(
     taskId: string,
   ): Array<ReworkRound & { workLogs: WorkLogEntry[] }> {
+    const allLogs = getWorkLogs(taskId);
     return getReworkRounds(taskId).map((round) => ({
       ...round,
-      workLogs: [...workLogs.values()].filter((w) => w.roundId === round.id),
+      workLogs: allLogs.filter((w) => w.roundId === round.id),
     }));
   }
 
@@ -246,9 +417,7 @@ export function createTaskService() {
     return task.assignees.map(({ person, estimatedHours }) => ({
       person,
       estimatedHours,
-      actualHours: logs
-        .filter((l) => l.person === person)
-        .reduce((sum, l) => sum + l.hours, 0),
+      actualHours: logs.filter((l) => l.person === person).reduce((sum, l) => sum + l.hours, 0),
     }));
   }
 
@@ -263,14 +432,23 @@ export function createTaskService() {
     if (params.specId !== undefined) {
       requireSpec(params.specId);
     }
-    const reminder: Reminder = {
-      ...params,
-      id: generateId("reminder"),
-      status: "未處理",
-      priority: params.priority ?? "中",
-    };
-    reminders.set(reminder.id, reminder);
-    return reminder;
+    const id = generateId("reminder");
+    const status: Reminder["status"] = "未處理";
+    const priority = params.priority ?? "中";
+    db.prepare(
+      `INSERT INTO reminders (id, created_by, assigned_to, title, spec_id, status, priority, due_date, closed_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+    ).run(
+      id,
+      params.createdBy,
+      params.assignedTo,
+      params.title,
+      params.specId ?? null,
+      status,
+      priority,
+      params.dueDate ?? null,
+    );
+    return requireReminder(id);
   }
 
   // 自建給自己、且未掛勾規格的提醒＝個人雜事；不是獨立實體，只是這個情境的判斷。
@@ -283,9 +461,12 @@ export function createTaskService() {
     if (reminder.status !== "未處理") {
       throw new ValidationError(`Cannot close a reminder from status: ${reminder.status}`);
     }
-    reminder.status = "已結案";
-    reminder.closedDate = today();
-    return reminder;
+    db.prepare("UPDATE reminders SET status = ?, closed_date = ? WHERE id = ?").run(
+      "已結案",
+      today(),
+      reminderId,
+    );
+    return requireReminder(reminderId);
   }
 
   function logReminderWork(
@@ -293,18 +474,19 @@ export function createTaskService() {
     entry: { person: string; date: string; hours: number; note?: string },
   ): ReminderWorkLogEntry {
     requireReminder(reminderId);
-    const workLog: ReminderWorkLogEntry = {
-      id: generateId("reminder-worklog"),
-      reminderId,
-      ...entry,
-    };
-    reminderWorkLogs.set(workLog.id, workLog);
+    const workLog: ReminderWorkLogEntry = { id: generateId("reminder-worklog"), reminderId, ...entry };
+    db.prepare(
+      "INSERT INTO reminder_work_logs (id, reminder_id, person, date, hours, note) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run(workLog.id, workLog.reminderId, workLog.person, workLog.date, workLog.hours, workLog.note ?? null);
     return workLog;
   }
 
   function getReminderWorkLogs(reminderId: string): ReminderWorkLogEntry[] {
     requireReminder(reminderId);
-    return [...reminderWorkLogs.values()].filter((w) => w.reminderId === reminderId);
+    const rows = db
+      .prepare("SELECT * FROM reminder_work_logs WHERE reminder_id = ? ORDER BY rowid")
+      .all(reminderId) as unknown as ReminderWorkLogRow[];
+    return rows.map(rowToReminderWorkLog);
   }
 
   // 個人雜事對建立者以外的人預設不可見，一旦被報工就對其他人可見；
@@ -316,7 +498,8 @@ export function createTaskService() {
   }
 
   function listRemindersVisibleTo(viewer: string): Reminder[] {
-    return [...reminders.values()].filter((reminder) => isReminderVisibleTo(reminder, viewer));
+    const rows = db.prepare("SELECT * FROM reminders ORDER BY rowid").all() as unknown as ReminderRow[];
+    return rows.map(rowToReminder).filter((reminder) => isReminderVisibleTo(reminder, viewer));
   }
 
   // 提醒升級成正式任務：同一筆資料轉換身份，不是新增重複記錄——
@@ -333,50 +516,60 @@ export function createTaskService() {
       priority: reminder.priority,
       dueDate: reminder.dueDate,
     });
-    reminders.delete(reminderId);
+    db.prepare("DELETE FROM reminders WHERE id = ?").run(reminderId);
     return task;
   }
 
+  function allTasksAsTodoItems(): TodoItem[] {
+    const rows = db.prepare("SELECT * FROM tasks ORDER BY rowid").all() as unknown as TaskRow[];
+    return rows.map(rowToTask).map(
+      (t): TodoItem => ({
+        id: t.id,
+        kind: "task",
+        title: t.title,
+        priority: t.priority,
+        dueDate: t.dueDate,
+        status: t.status,
+        closedDate: t.closedDate,
+        specId: t.specId,
+        owners: t.assignees.map((a) => a.person),
+        isChore: false,
+      }),
+    );
+  }
+
+  function allRemindersAsTodoItems(): TodoItem[] {
+    const rows = db.prepare("SELECT * FROM reminders ORDER BY rowid").all() as unknown as ReminderRow[];
+    return rows.map(rowToReminder).map(
+      (r): TodoItem => ({
+        id: r.id,
+        kind: "reminder",
+        title: r.title,
+        priority: r.priority,
+        dueDate: r.dueDate,
+        status: r.status,
+        closedDate: r.closedDate,
+        specId: r.specId,
+        owners: [r.assignedTo],
+        isChore: isChore(r),
+      }),
+    );
+  }
+
   function getTodoList(): TodoItem[] {
-    const allItems: TodoItem[] = [
-      ...[...tasks.values()].map(
-        (t): TodoItem => ({
-          id: t.id,
-          kind: "task",
-          title: t.title,
-          priority: t.priority,
-          dueDate: t.dueDate,
-          status: t.status,
-          closedDate: t.closedDate,
-          specId: t.specId,
-          owners: t.assignees.map((a) => a.person),
-          isChore: false,
-        }),
-      ),
-      ...[...reminders.values()].map(
-        (r): TodoItem => ({
-          id: r.id,
-          kind: "reminder",
-          title: r.title,
-          priority: r.priority,
-          dueDate: r.dueDate,
-          status: r.status,
-          closedDate: r.closedDate,
-          specId: r.specId,
-          owners: [r.assignedTo],
-          isChore: isChore(r),
-        }),
-      ),
-    ];
+    const allItems: TodoItem[] = [...allTasksAsTodoItems(), ...allRemindersAsTodoItems()];
     const byId = new Map(allItems.map((item) => [item.id, item]));
 
-    const manualItems = manualOrderSequence
-      .map((id) => byId.get(id))
+    const manualIds = db
+      .prepare("SELECT item_id FROM manual_order ORDER BY position")
+      .all() as unknown as { item_id: string }[];
+    const manualItems = manualIds
+      .map((row) => byId.get(row.item_id))
       .filter((item): item is TodoItem => item !== undefined);
 
-    const manualIds = new Set(manualOrderSequence);
+    const manualIdSet = new Set(manualIds.map((row) => row.item_id));
     const defaultItems = allItems
-      .filter((item) => !manualIds.has(item.id))
+      .filter((item) => !manualIdSet.has(item.id))
       .sort((a, b) => {
         const priorityDiff = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
         if (priorityDiff !== 0) return priorityDiff;
@@ -392,50 +585,50 @@ export function createTaskService() {
   // 手動覆蓋排序：把項目移到手動序列中的指定位置；之後新加入的項目
   // 不會自動進入這個序列，只會被預設排序附加在手動區塊之後。
   function moveTodoItem(itemId: string, toIndex: number): void {
-    if (!tasks.has(itemId) && !reminders.has(itemId)) {
+    const taskExists = db.prepare("SELECT 1 FROM tasks WHERE id = ?").get(itemId);
+    const reminderExists = db.prepare("SELECT 1 FROM reminders WHERE id = ?").get(itemId);
+    if (!taskExists && !reminderExists) {
       throw new NotFoundError(`Todo item not found: ${itemId}`);
     }
-    const currentIndex = manualOrderSequence.indexOf(itemId);
-    if (currentIndex !== -1) manualOrderSequence.splice(currentIndex, 1);
-    const clampedIndex = Math.max(0, Math.min(toIndex, manualOrderSequence.length));
-    manualOrderSequence.splice(clampedIndex, 0, itemId);
+
+    const rows = db.prepare("SELECT item_id FROM manual_order ORDER BY position").all() as unknown as {
+      item_id: string;
+    }[];
+    const sequence = rows.map((r) => r.item_id);
+
+    const currentIndex = sequence.indexOf(itemId);
+    if (currentIndex !== -1) sequence.splice(currentIndex, 1);
+    const clampedIndex = Math.max(0, Math.min(toIndex, sequence.length));
+    sequence.splice(clampedIndex, 0, itemId);
+
+    db.exec("DELETE FROM manual_order");
+    const insert = db.prepare("INSERT INTO manual_order (item_id, position) VALUES (?, ?)");
+    sequence.forEach((id, position) => insert.run(id, position));
   }
 
   // 依「我／某位同仁／全觀」查詢，套用 ADR-0001（任務進度與報工全公開）
   // 與個人雜事的可見性規則（viewer 以外的人看不到未報工的雜事）。
   function getScopedTodoList(viewer: string, scope: Scope): TodoItem[] {
     return getTodoList().filter((item) => {
-      if (item.kind === "task") {
-        const task = requireTask(item.id);
-        if (scope !== "all" && !task.assignees.some((a) => a.person === scope.person)) {
-          return false;
-        }
-        return true;
+      if (scope !== "all" && !item.owners.includes(scope.person)) return false;
+      if (item.kind === "reminder") {
+        const reminder = requireReminder(item.id);
+        return isReminderVisibleTo(reminder, viewer);
       }
-      const reminder = requireReminder(item.id);
-      if (scope !== "all" && reminder.assignedTo !== scope.person) return false;
-      return isReminderVisibleTo(reminder, viewer);
+      return true;
     });
   }
 
   // ADR-0002：完成/結案的項目不是看板常駐欄位——只有今天結案的才短暫可見，
   // 隔天起從活躍清單與「今日剛完成」查詢中都消失，只留在工時統計裡可查。
   function isClosedToday(item: TodoItem): boolean {
-    if (item.kind === "task") {
-      const task = requireTask(item.id);
-      return task.status === "完成" && task.closedDate === today();
-    }
-    const reminder = requireReminder(item.id);
-    return reminder.status === "已結案" && reminder.closedDate === today();
+    const closedStatus = item.kind === "task" ? "完成" : "已結案";
+    return item.status === closedStatus && item.closedDate === today();
   }
 
   function isClosedBeforeToday(item: TodoItem): boolean {
-    if (item.kind === "task") {
-      const task = requireTask(item.id);
-      return task.status === "完成" && task.closedDate !== today();
-    }
-    const reminder = requireReminder(item.id);
-    return reminder.status === "已結案" && reminder.closedDate !== today();
+    const closedStatus = item.kind === "task" ? "完成" : "已結案";
+    return item.status === closedStatus && item.closedDate !== today();
   }
 
   function getActiveTodoList(): TodoItem[] {
@@ -453,17 +646,29 @@ export function createTaskService() {
   // 本月待處理工時（未完成任務的預計工時加總，依範圍）與已投入工時（當月報工加總，依範圍）。
   function getMonthlyStats(scope: Scope, month: string): { pendingHours: number; loggedHours: number } {
     let pendingHours = 0;
-    for (const task of tasks.values()) {
-      if (task.status === "完成") continue;
-      for (const assignee of task.assignees) {
-        if (matchesScope(scope, assignee.person) && assignee.estimatedHours !== undefined) {
-          pendingHours += assignee.estimatedHours;
-        }
+    const assigneeRows = db
+      .prepare(
+        `SELECT ta.person, ta.estimated_hours FROM task_assignees ta
+         JOIN tasks t ON t.id = ta.task_id
+         WHERE t.status != '完成'`,
+      )
+      .all() as unknown as { person: string; estimated_hours: number | null }[];
+    for (const row of assigneeRows) {
+      if (matchesScope(scope, row.person) && row.estimated_hours !== null) {
+        pendingHours += row.estimated_hours;
       }
     }
 
     let loggedHours = 0;
-    for (const log of [...workLogs.values(), ...reminderWorkLogs.values()]) {
+    const taskLogRows = db.prepare("SELECT person, date, hours FROM work_logs").all() as unknown as {
+      person: string;
+      date: string;
+      hours: number;
+    }[];
+    const reminderLogRows = db
+      .prepare("SELECT person, date, hours FROM reminder_work_logs")
+      .all() as unknown as { person: string; date: string; hours: number }[];
+    for (const log of [...taskLogRows, ...reminderLogRows]) {
       if (matchesScope(scope, log.person) && log.date.startsWith(month)) {
         loggedHours += log.hours;
       }
@@ -479,18 +684,26 @@ export function createTaskService() {
     period: { start: string; end: string },
   ): Array<{ person: string; estimatedHours: number; actualHours: number }> {
     const estimatedByPerson = new Map<string, number>();
-    for (const task of tasks.values()) {
-      for (const assignee of task.assignees) {
-        if (!matchesScope(scope, assignee.person) || assignee.estimatedHours === undefined) continue;
-        estimatedByPerson.set(
-          assignee.person,
-          (estimatedByPerson.get(assignee.person) ?? 0) + assignee.estimatedHours,
-        );
-      }
+    const assigneeRows = db
+      .prepare("SELECT person, estimated_hours FROM task_assignees").all() as unknown as {
+      person: string;
+      estimated_hours: number | null;
+    }[];
+    for (const row of assigneeRows) {
+      if (!matchesScope(scope, row.person) || row.estimated_hours === null) continue;
+      estimatedByPerson.set(row.person, (estimatedByPerson.get(row.person) ?? 0) + row.estimated_hours);
     }
 
     const actualByPerson = new Map<string, number>();
-    for (const log of [...workLogs.values(), ...reminderWorkLogs.values()]) {
+    const taskLogRows = db.prepare("SELECT person, date, hours FROM work_logs").all() as unknown as {
+      person: string;
+      date: string;
+      hours: number;
+    }[];
+    const reminderLogRows = db
+      .prepare("SELECT person, date, hours FROM reminder_work_logs")
+      .all() as unknown as { person: string; date: string; hours: number }[];
+    for (const log of [...taskLogRows, ...reminderLogRows]) {
       if (!matchesScope(scope, log.person)) continue;
       if (log.date < period.start || log.date > period.end) continue;
       actualByPerson.set(log.person, (actualByPerson.get(log.person) ?? 0) + log.hours);

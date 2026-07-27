@@ -2,13 +2,14 @@ import type { Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTaskService, type TaskService } from "../domain/taskService.js";
 import { createApp } from "./app.js";
-import { closeServer, listenOnEphemeralPort, readJson } from "./testHelpers.js";
+import { closeServer, createAuthedFetch, listenOnEphemeralPort, readJson, registerAndLogin } from "./testHelpers.js";
 
 describe("API - 活躍清單／今日剛完成 endpoint（ADR-0002）", () => {
   let service: TaskService;
   let server: Server;
   let baseUrl: string;
   let specId: string;
+  let fetch: typeof globalThis.fetch;
 
   beforeEach(async () => {
     vi.useFakeTimers();
@@ -18,6 +19,7 @@ describe("API - 活躍清單／今日剛完成 endpoint（ADR-0002）", () => {
     const spec = service.createSpec(requirement.id, "S");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
+    fetch = createAuthedFetch(await registerAndLogin(baseUrl));
   });
 
   afterEach(async () => {
