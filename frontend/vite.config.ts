@@ -13,6 +13,8 @@ export default defineConfig({
       "/requirements": "http://localhost:3000",
       "/specs": "http://localhost:3000",
       "/stats": "http://localhost:3000",
+      "/auth": "http://localhost:3000",
+      "/accounts": "http://localhost:3000",
     },
   },
   test: {
