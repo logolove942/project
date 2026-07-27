@@ -1,0 +1,1304 @@
+<!--
+  PROTOTYPE — throwaway. Not production code.
+  Round 1 (this file's original scope): visual redesign of the two screens
+  already shipped in frontend/src/components (KanbanBoard.vue,
+  RequirementsView.vue) — Enterprise SaaS visual language, still just
+  system-font/flat-border wireframes in the real app.
+
+  Round 2 (this update): design for the next batch of OPEN, not-yet-built
+  GitHub issues under the "帳號登入 + SQLite 持久化 + 識別切換 UI 改版" epic
+  (#43) — the SQLite/persistence and pure-backend auth/authorization pieces
+  (#44, #46, #47) have no UI surface of their own, so this prototype covers
+  the four issues that do:
+    #48 前端登入/註冊畫面 + token 串接   -> auth gate screen (login/register)
+    #49 識別切換改版                      -> "我是" removed, "同仁" is now a <select>
+    #50 人名欄位改版                      -> assignee/reminder-target/worklog-person
+                                            fields are account pickers, not free text
+    #51 前端管理職專屬 UI + 升級帳號畫面   -> create-buttons hidden for 一般同仁,
+                                            new 帳號管理 tab with 升級為管理職
+    #52 版面修正：置中、限制寬度           -> already satisfied by the existing
+                                            centered #app max-width container
+  There's no real backend here — "login" just matches a typed name against
+  the in-memory ACCOUNTS list (or creates one), and switching which demo
+  account you log in as is how you preview 管理職 vs 一般同仁 UI states side
+  by side, matching how the real app will actually branch (by session role,
+  not a manual toggle).
+  Switchable via ?tab=kanban|requirements. Open directly in a browser —
+  no build step, no server needed.
+-->
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE — 工作台視覺重新設計</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --surface-2: #F1F5F9;
+    --border: #E2E8F0;
+    --border-strong: #CBD5E1;
+    --text: #0F172A;
+    --text-dim: #64748B;
+    --text-faint: #94A3B8;
+
+    --primary: #4F46E5;
+    --primary-hover: #4338CA;
+    --primary-tint: #EEF2FF;
+    --primary-tint-strong: #E0E7FF;
+    --secondary: #7C3AED;
+    --secondary-tint: #F3E8FF;
+
+    --success: #16A34A;
+    --success-tint: #DCFCE7;
+    --warning: #D97706;
+    --warning-tint: #FEF3C7;
+    --danger: #DC2626;
+    --danger-tint: #FEE2E2;
+    --slate: #64748B;
+    --slate-tint: #F1F5F9;
+
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+    --shadow-lg: 0 12px 32px -8px rgba(79, 70, 229, 0.18), 0 4px 12px -4px rgba(15, 23, 42, 0.08);
+    --shadow-focus: 0 0 0 3px rgba(79, 70, 229, 0.15);
+
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-pill: 999px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0B1120;
+      --surface: #131B2E;
+      --surface-2: #1A2338;
+      --border: #263049;
+      --border-strong: #33405E;
+      --text: #EEF1F8;
+      --text-dim: #9AA6BC;
+      --text-faint: #6C7891;
+
+      --primary: #818CF8;
+      --primary-hover: #A5B4FC;
+      --primary-tint: #1D2547;
+      --primary-tint-strong: #262F5C;
+      --secondary: #C4B5FD;
+      --secondary-tint: #2C2153;
+
+      --success: #4ADE80;
+      --success-tint: #123822;
+      --warning: #FBBF24;
+      --warning-tint: #3D2E0B;
+      --danger: #F87171;
+      --danger-tint: #3B1616;
+      --slate: #9AA6BC;
+      --slate-tint: #1A2338;
+
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 14px -2px rgba(0, 0, 0, 0.45);
+      --shadow-lg: 0 16px 40px -10px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(129, 140, 248, 0.08);
+      --shadow-focus: 0 0 0 3px rgba(129, 140, 248, 0.25);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select, textarea { font-family: inherit; }
+  h1, h2, h3, h4 { margin: 0; }
+
+  /* ================= Topbar ================= */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 24px;
+    padding: 12px 28px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white; display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 800; box-shadow: var(--shadow-sm);
+  }
+  .brand-name { font-size: 15px; font-weight: 700; line-height: 1.2; }
+  .brand-sub { font-size: 11px; color: var(--text-faint); line-height: 1.2; }
+
+  .tabs { display: flex; gap: 2px; background: var(--surface-2); padding: 3px; border-radius: var(--radius-pill); }
+  .tab {
+    border: none; background: transparent; color: var(--text-dim);
+    font-size: 13px; font-weight: 600; padding: 7px 16px; border-radius: var(--radius-pill);
+    cursor: pointer; transition: all .15s ease;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--surface); color: var(--primary); box-shadow: var(--shadow-sm); }
+
+  .identity { display: flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+  .viewer-field {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-pill);
+    padding: 5px 12px 5px 6px;
+  }
+  .avatar {
+    width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: white;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+  }
+  .scope-seg { display: flex; background: var(--surface-2); border-radius: var(--radius-pill); padding: 3px; }
+  .scope-seg button {
+    border: none; background: transparent; color: var(--text-dim); font-size: 12px; font-weight: 600;
+    padding: 6px 13px; border-radius: var(--radius-pill); cursor: pointer;
+  }
+  .scope-seg button.active { background: var(--primary); color: white; }
+  .scope-person-select {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: var(--radius-pill); font-size: 12px; padding: 6px 12px; outline: none; cursor: pointer;
+  }
+  .scope-person-select:focus { box-shadow: var(--shadow-focus); border-color: var(--primary); }
+
+  .role-badge { font-size: 10.5px; font-weight: 700; padding: 2px 9px; border-radius: var(--radius-pill); white-space: nowrap; }
+  .role-badge.admin { background: var(--primary-tint); color: var(--primary); }
+  .role-badge.member { background: var(--slate-tint); color: var(--slate); }
+
+  /* ================= Page shell ================= */
+  #app { max-width: 1180px; margin: 0 auto; padding: 22px 28px 80px; }
+
+  /* ================= Auth gate ================= */
+  .auth-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .auth-card {
+    width: 380px; max-width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 28px 26px; box-shadow: var(--shadow-lg);
+  }
+  .auth-divider { text-align: center; font-size: 11.5px; color: var(--text-faint); margin: 18px 0 12px; }
+  .demo-accounts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .auth-note { font-size: 11px; color: var(--text-faint); text-align: center; margin-top: 16px; line-height: 1.5; }
+
+  /* ================= Toolbar row: stats + quick add ================= */
+  .toolbar-row { display: flex; align-items: stretch; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .stat-card {
+    flex: 1; min-width: 180px; display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 14px 18px; box-shadow: var(--shadow-sm);
+  }
+  .stat-icon {
+    width: 38px; height: 38px; border-radius: var(--radius-md); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 17px;
+    background: var(--primary-tint); color: var(--primary);
+  }
+  .stat-card.done .stat-icon { background: var(--success-tint); color: var(--success); }
+  .stat-label { font-size: 11.5px; color: var(--text-dim); margin-bottom: 2px; }
+  .stat-value { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; }
+
+  .quick-actions { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    border: none; cursor: pointer; font-size: 13px; font-weight: 600;
+    padding: 10px 16px; border-radius: var(--radius-md); transition: all .15s ease;
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .btn-primary { background: var(--primary); color: white; box-shadow: var(--shadow-sm); }
+  .btn-primary:hover { background: var(--primary-hover); box-shadow: var(--shadow-md); transform: translateY(-1px); }
+  .btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border) !important; }
+  .btn-ghost:hover { border-color: var(--border-strong) !important; background: var(--surface-2); }
+  .btn-text { background: transparent; color: var(--text-dim); padding: 8px 10px; }
+  .btn-text:hover { color: var(--text); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; transform: none !important; }
+
+  /* ================= Filter chips ================= */
+  .filter-row { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+    padding: 6px 14px; border-radius: var(--radius-pill); font-size: 12.5px; font-weight: 500; cursor: pointer;
+    transition: all .15s ease;
+  }
+  .chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .chip.active { background: var(--primary); border-color: var(--primary); color: white; }
+
+  /* ================= Badges / pills ================= */
+  .badge {
+    display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 700;
+    padding: 2px 8px; border-radius: var(--radius-pill); white-space: nowrap; letter-spacing: .01em;
+  }
+  .badge-task { background: var(--primary-tint); color: var(--primary); }
+  .badge-reminder { background: var(--warning-tint); color: var(--warning); }
+  .badge-chore { background: var(--secondary-tint); color: var(--secondary); }
+
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .pri-高 { background: var(--danger); }
+  .pri-中 { background: var(--warning); }
+  .pri-低 { background: var(--text-faint); }
+
+  .status-pill {
+    font-size: 10.5px; font-weight: 600; padding: 2px 9px; border-radius: var(--radius-pill);
+    border: 1px solid currentColor;
+  }
+  .status-待處理 { color: var(--slate); }
+  .status-進行中 { color: var(--primary); }
+  .status-暫停 { color: var(--warning); }
+  .status-完成, .status-已結案 { color: var(--success); }
+  .status-未處理 { color: var(--slate); }
+
+  .due-pill { font-size: 11.5px; color: var(--text-dim); }
+  .due-pill.overdue { color: var(--danger); font-weight: 600; }
+
+  /* ================= Board ================= */
+  .board-layout { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+  .board-layout.with-panel { grid-template-columns: 1fr 340px; }
+  .columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+  .column { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; min-height: 140px; }
+  .column-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 12px; }
+  .column-head h3 { font-size: 12.5px; font-weight: 700; color: var(--text-dim); letter-spacing: .02em; }
+  .column-count {
+    font-size: 11px; font-weight: 700; color: var(--text-dim); background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 1px 8px;
+  }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: 12px 13px; margin-bottom: 10px; cursor: pointer; position: relative; overflow: hidden;
+    box-shadow: var(--shadow-sm); transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  }
+  .card.pri-高-bar::before { background: var(--danger); }
+  .card.pri-中-bar::before { background: var(--warning); }
+  .card.pri-低-bar::before { background: var(--border-strong); }
+  .card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); border-color: var(--border-strong); }
+  .card.selected { border-color: var(--primary); box-shadow: var(--shadow-focus); }
+  .card.dragging { opacity: 0.4; }
+  .card-title { font-size: 13px; font-weight: 600; line-height: 1.4; margin-bottom: 7px; padding-left: 4px; }
+  .card-badges { display: flex; gap: 5px; align-items: center; margin-bottom: 7px; padding-left: 4px; flex-wrap: wrap; }
+  .card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 4px; }
+  .avatar-row { display: flex; align-items: center; }
+  .avatar-row .avatar { width: 18px; height: 18px; font-size: 8px; margin-left: -6px; border: 2px solid var(--surface); }
+  .avatar-row .avatar:first-child { margin-left: 0; }
+  .card-spec { font-size: 11px; color: var(--text-faint); }
+  .complete-btn {
+    margin-top: 9px; margin-left: 4px; font-size: 11.5px; font-weight: 600; padding: 4px 10px;
+    border-radius: var(--radius-sm); border: 1px solid var(--success); background: var(--success-tint);
+    color: var(--success); cursor: pointer;
+  }
+  .complete-btn:hover { background: var(--success); color: white; }
+  .column.dragover { outline: 2px dashed var(--primary); outline-offset: -6px; background: var(--primary-tint); }
+
+  /* recently completed */
+  .recently-completed { margin-top: 18px; }
+  .recently-completed summary {
+    cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--text-dim); padding: 8px 4px;
+    list-style: none; display: flex; align-items: center; gap: 8px;
+  }
+  .recently-completed summary::-webkit-details-marker { display: none; }
+  .recently-completed summary::before { content: "▸"; color: var(--text-faint); transition: transform .15s ease; }
+  .recently-completed[open] summary::before { transform: rotate(90deg); }
+  .recently-completed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 6px; }
+
+  /* ================= Detail panel ================= */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 18px; position: sticky; top: 74px; box-shadow: var(--shadow-lg);
+  }
+  .panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+  .panel-head h2 { font-size: 15px; font-weight: 700; line-height: 1.4; }
+  .panel-close { border: none; background: var(--surface-2); color: var(--text-dim); width: 26px; height: 26px; border-radius: 50%; cursor: pointer; flex-shrink: 0; font-size: 13px; }
+  .panel-close:hover { background: var(--danger-tint); color: var(--danger); }
+  .panel-badges { display: flex; gap: 6px; margin: 8px 0 14px; flex-wrap: wrap; }
+  .panel-section { margin-top: 14px; }
+  .panel-section-label { font-size: 11px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+  .panel-row { display: flex; justify-content: space-between; font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--border); color: var(--text-dim); }
+  .panel-row span:last-child { color: var(--text); font-weight: 500; }
+  .panel-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .worklog-entry { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+  .worklog-date { color: var(--text-faint); flex-shrink: 0; }
+  .worklog-person { font-weight: 600; color: var(--text); flex-shrink: 0; }
+  .worklog-note { color: var(--text-dim); flex: 1; }
+  .worklog-hours { font-weight: 700; color: var(--primary); flex-shrink: 0; }
+  .empty-panel {
+    color: var(--text-faint); font-size: 13px; text-align: center; padding: 50px 12px;
+    border: 1px dashed var(--border); border-radius: var(--radius-lg); background: var(--surface);
+  }
+
+  /* ================= Quick add slide-over ================= */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(10, 14, 26, 0.4); backdrop-filter: blur(2px);
+    z-index: 40; display: flex; justify-content: flex-end;
+  }
+  .slideover {
+    width: 380px; max-width: 92vw; height: 100%; background: var(--surface);
+    box-shadow: -12px 0 40px rgba(0,0,0,0.2); padding: 22px; overflow-y: auto;
+    animation: slidein .18s ease;
+  }
+  @keyframes slidein { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .slideover h2 { font-size: 16px; margin-bottom: 4px; }
+  .slideover .hint { font-size: 12px; color: var(--text-faint); margin-bottom: 18px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; }
+  .field input, .field select, .field textarea {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text); font-size: 13px; outline: none; transition: border-color .12s ease;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--primary); box-shadow: var(--shadow-focus); }
+  .assignee-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .assignee-row select { flex: 1; }
+  .icon-btn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+    width: 32px; height: 32px; border-radius: var(--radius-sm); cursor: pointer; flex-shrink: 0;
+  }
+  .icon-btn:hover { background: var(--surface-2); }
+  .form-error { color: var(--danger); font-size: 12px; margin: 6px 0 0; }
+  .form-footer { display: flex; gap: 8px; margin-top: 18px; }
+  .form-footer .btn { flex: 1; justify-content: center; }
+
+  /* ================= Requirements view ================= */
+  .req-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .req-toolbar h1 { font-size: 18px; }
+  .readonly-note {
+    background: var(--surface-2); border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
+    padding: 12px 16px; font-size: 12.5px; color: var(--text-dim); margin-bottom: 12px;
+  }
+  .req-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    margin-bottom: 12px; overflow: hidden; box-shadow: var(--shadow-sm);
+  }
+  .req-head {
+    display: flex; align-items: center; gap: 10px; padding: 15px 18px; cursor: pointer;
+  }
+  .req-chevron { color: var(--text-faint); font-size: 12px; transition: transform .15s ease; flex-shrink: 0; }
+  .req-card.expanded .req-chevron { transform: rotate(90deg); }
+  .req-title { font-size: 14px; font-weight: 700; flex: 1; }
+  .req-progress-mini { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-faint); }
+  .req-body { border-top: 1px solid var(--border); padding: 6px 18px 16px; display: none; }
+  .req-card.expanded .req-body { display: block; }
+
+  .spec-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 10px; border-radius: var(--radius-md);
+    margin-top: 8px; background: var(--surface-2);
+  }
+  .spec-main { flex: 1; min-width: 0; }
+  .spec-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .progress-track { height: 6px; border-radius: var(--radius-pill); background: var(--border); overflow: hidden; width: 100%; max-width: 220px; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary)); border-radius: var(--radius-pill); }
+  .spec-progress-label { font-size: 11px; color: var(--text-faint); margin-top: 4px; }
+  .spec-tasks { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .task-row {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 6px 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .task-row .task-title { flex: 1; }
+
+  .add-inline-btn {
+    border: 1px dashed var(--border-strong); background: transparent; color: var(--primary);
+    font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: var(--radius-sm); cursor: pointer;
+    margin-top: 10px;
+  }
+  .add-inline-btn:hover { background: var(--primary-tint); }
+  .inline-form {
+    display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; align-items: center;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px;
+  }
+  .inline-form input, .inline-form select {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--text); font-size: 12.5px; outline: none;
+  }
+  .inline-form input:focus, .inline-form select:focus { border-color: var(--primary); }
+
+  /* ================= Accounts view ================= */
+  .account-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid var(--border);
+  }
+  .account-row:last-child { border-bottom: none; }
+  .account-name { font-size: 13px; font-weight: 600; flex: 1; }
+
+  @media (max-width: 860px) {
+    .topbar { flex-wrap: wrap; padding: 10px 16px; }
+    .identity { margin-left: 0; width: 100%; justify-content: space-between; }
+    #app { padding: 16px 16px 80px; }
+    .columns { grid-template-columns: 1fr 1fr; }
+    .board-layout.with-panel { grid-template-columns: 1fr; }
+    .panel { position: static; }
+    .slideover { width: 100%; }
+  }
+  @media (max-width: 560px) {
+    .columns { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ================= fake data ================= */
+const TODAY = "2026-07-28";
+const CURRENT_MONTH = "2026-07";
+const PEOPLE_COLORS = ["#4F46E5", "#7C3AED", "#0EA5E9", "#DB2777", "#16A34A", "#D97706"];
+function initials(name) { return (name || "?").slice(0, 1).toUpperCase(); }
+function avatarColor(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+  return PEOPLE_COLORS[Math.abs(h) % PEOPLE_COLORS.length];
+}
+function isAdmin(acc) { return !!acc && acc.role === "管理職"; }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// 帳號名單（issue #45 GET /accounts 的來源）：所有需要打人名的欄位都從這裡選，不再自由輸入。
+let ACCOUNTS = [
+  { id: "a1", name: "我", role: "管理職" },
+  { id: "a2", name: "小美", role: "一般同仁" },
+  { id: "a3", name: "阿凱", role: "一般同仁" },
+];
+function accountOptions(selected) {
+  return ACCOUNTS.map(a => `<option value="${escapeHtml(a.name)}" ${a.name === selected ? "selected" : ""}>${escapeHtml(a.name)}</option>`).join("");
+}
+
+let items = [
+  { id: 1,  kind: "task", subtype: "開發任務", title: "會員登入規格 - 開發", spec: "會員登入規格", priority: "高", due: "2026-07-29", status: "進行中", from: null, owners: ["我"], estHours: 16 },
+  { id: 2,  kind: "task", subtype: "測試任務", title: "訂單結帳規格 - 測試", spec: "訂單結帳規格", priority: "中", due: "2026-07-31", status: "待處理", from: null, owners: ["小美"], estHours: 8 },
+  { id: 3,  kind: "task", subtype: "開發任務", title: "報表匯出規格 - 開發", spec: "報表匯出規格", priority: "高", due: "2026-07-28", status: "暫停", from: null, owners: ["我"], estHours: 24 },
+  { id: 4,  kind: "reminder", subtype: "同仁提醒", title: "幫忙建立 STB 專案的 git repo", spec: null, priority: "中", due: "2026-07-30", status: "未處理", from: "小美", owners: ["我"] },
+  { id: 5,  kind: "reminder", subtype: "規格相關提醒", title: "規格書欄位代號寫錯，通知 SA 調整", spec: "會員登入規格", priority: "低", due: null, status: "未處理", from: "自己（開發時發現）", owners: ["我"] },
+  { id: 6,  kind: "reminder", subtype: "雜事", title: "設定新同仁帳號權限", spec: null, priority: "中", due: "2026-07-31", status: "未處理", from: "自己", owners: ["我"] },
+  { id: 7,  kind: "reminder", subtype: "雜事", title: "整理季度工時報表給老闆", spec: null, priority: "高", due: "2026-08-02", status: "未處理", from: "自己", owners: ["我"] },
+  { id: 8,  kind: "task", subtype: "開發任務（重工第2回合）", title: "金流串接規格 - 開發", spec: "金流串接規格", priority: "高", due: "2026-07-29", status: "進行中", from: null, owners: ["阿凱"], estHours: 20 },
+  { id: 9,  kind: "reminder", subtype: "雜事", title: "訂會議室辦季度檢討", spec: null, priority: "低", due: "2026-08-05", status: "未處理", from: "自己", owners: ["我"] },
+  { id: 10, kind: "reminder", subtype: "同仁提醒", title: "幫忙看一下測試環境是不是掛了", spec: null, priority: "高", due: "2026-07-28", status: "已結案", from: "阿凱", owners: ["我"], closedDate: "2026-07-28" },
+  { id: 11, kind: "task", subtype: "測試任務", title: "會員登入規格 - 測試", spec: "會員登入規格", priority: "中", due: "2026-08-03", status: "待處理", from: null, owners: ["小美", "阿凱"], estHours: 8 },
+  { id: 12, kind: "task", subtype: "開發任務", title: "通知中心規格 - 開發", spec: "通知中心規格", priority: "中", due: "2026-07-22", status: "完成", from: null, owners: ["阿凱"], estHours: 12, closedDate: "2026-07-22" },
+  { id: 13, kind: "task", subtype: "測試任務", title: "報表匯出規格 - 測試", spec: "報表匯出規格", priority: "中", due: "2026-07-17", status: "完成", from: null, owners: ["小美"], estHours: 6, closedDate: "2026-07-17" },
+];
+
+let workLogs = {
+  1: [{ date: "2026-07-26", hours: 6, note: "完成登入 API", person: "我" }, { date: "2026-07-27", hours: 4, note: "串接前端", person: "我" }],
+  3: [{ date: "2026-07-24", hours: 8, note: "調整匯出邏輯", person: "我" }],
+  6: [{ date: "2026-07-22", hours: 1, note: "設定帳號", person: "我" }],
+  8: [{ date: "2026-07-27", hours: 5, note: "金流重工第 2 回合", person: "阿凱" }],
+  10: [{ date: "2026-07-28", hours: 0.5, note: "確認環境正常", person: "我" }],
+  12: [{ date: "2026-07-20", hours: 10, note: "通知中心開發", person: "阿凱" }, { date: "2026-07-22", hours: 2, note: "最後修正", person: "阿凱" }],
+  13: [{ date: "2026-07-16", hours: 4, note: "報表測試", person: "小美" }, { date: "2026-07-17", hours: 2, note: "回歸測試", person: "小美" }],
+};
+
+let requirementsData = [
+  {
+    id: "r1", title: "會員系統改版", status: "進行中",
+    specs: [
+      { id: "s1", title: "會員登入規格", estHours: 24, assignees: ["我", "小美"],
+        tasks: [
+          { id: "t1", type: "開發任務", title: "登入 API 開發", status: "進行中", assignees: ["我"] },
+          { id: "t2", type: "測試任務", title: "登入流程測試", status: "待處理", assignees: ["小美"] },
+        ] },
+      { id: "s2", title: "會員個資規格", estHours: 12, assignees: ["阿凱"],
+        tasks: [
+          { id: "t3", type: "開發任務", title: "個資編輯頁", status: "待處理", assignees: ["阿凱"] },
+        ] },
+    ],
+  },
+  {
+    id: "r2", title: "訂單與金流優化", status: "進行中",
+    specs: [
+      { id: "s3", title: "訂單結帳規格", estHours: 16, assignees: ["小美"],
+        tasks: [
+          { id: "t4", type: "測試任務", title: "結帳流程測試", status: "待處理", assignees: ["小美"] },
+        ] },
+      { id: "s4", title: "金流串接規格", estHours: 32, assignees: ["阿凱"],
+        tasks: [
+          { id: "t5", type: "開發任務", title: "金流 SDK 串接（重工第 2 回合）", status: "進行中", assignees: ["阿凱"] },
+        ] },
+    ],
+  },
+  {
+    id: "r3", title: "營運報表中心", status: "完成",
+    specs: [
+      { id: "s5", title: "報表匯出規格", estHours: 30, assignees: ["我", "小美"],
+        tasks: [
+          { id: "t6", type: "開發任務", title: "匯出邏輯開發", status: "完成", assignees: ["我"] },
+          { id: "t7", type: "測試任務", title: "匯出回歸測試", status: "完成", assignees: ["小美"] },
+        ] },
+    ],
+  },
+];
+
+/* ================= state ================= */
+const state = {
+  authed: false,             // #48 — 沒有有效 session 就只看得到登入/註冊畫面
+  currentAccount: null,
+  authMode: "login",         // "login" | "register"
+  authError: null,
+
+  activeTab: (new URLSearchParams(location.search).get("tab")) === "requirements" ? "requirements" : "kanban",
+  viewerName: "",
+  scopeMode: "self",
+  scopePersonName: "",
+  typeFilter: "全部",
+  selectedId: null,
+  dragSrcId: null,
+  quickAdd: null,           // null | "task" | "reminder"
+  expandedReqs: new Set(["r1"]),
+  specTaskFormOpen: null,   // spec id with the "+ 新增任務" form open
+  reqSpecFormOpen: null,    // requirement id with the "+ 新增規格" form open
+  newReqTitle: "",
+};
+
+const PRI_ORDER = { 高: 0, 中: 1, 低: 2 };
+const COLUMNS = ["待處理", "進行中", "暫停"];
+const TYPE_FILTERS = ["全部", "任務", "提醒", "雜事"];
+
+/* ================= domain helpers ================= */
+function typeBadge(item) {
+  if (item.kind === "task") return `<span class="badge badge-task">${item.subtype}</span>`;
+  if (item.subtype === "雜事") return `<span class="badge badge-chore">雜事</span>`;
+  return `<span class="badge badge-reminder">提醒</span>`;
+}
+function fmtDue(due) {
+  if (!due) return { text: "無期限", overdue: false };
+  if (due < TODAY) return { text: `已過期 · ${due.slice(5)}`, overdue: true };
+  if (due === TODAY) return { text: "今天到期", overdue: true };
+  return { text: due.slice(5), overdue: false };
+}
+function statusColumn(item) {
+  if (item.kind === "task") return item.status;
+  return item.status === "已結案" ? "完成" : "待處理";
+}
+function avatarsHtml(owners) {
+  return `<div class="avatar-row">${owners.map(o =>
+    `<span class="avatar" style="background:${avatarColor(o)}" title="${o}">${initials(o)}</span>`
+  ).join("")}</div>`;
+}
+// 個人雜事對非本人（管理職/其他同仁）預設不可見，除非已報工（CONTEXT.md）
+function personScopedItems(scopeMode, viewerName, scopePersonName) {
+  const targetPerson = scopeMode === "self" ? viewerName : scopeMode === "person" ? scopePersonName : null;
+  return items.filter(i => {
+    if (targetPerson && !i.owners.includes(targetPerson)) return false;
+    const hasWorkLog = !!(workLogs[i.id] && workLogs[i.id].length);
+    if (i.subtype === "雜事" && !hasWorkLog && !i.owners.includes(viewerName)) return false;
+    return true;
+  });
+}
+function matchesTypeFilter(item, filter) {
+  if (filter === "全部") return true;
+  if (filter === "任務") return item.kind === "task";
+  if (filter === "提醒") return item.kind === "reminder" && item.subtype !== "雜事";
+  return item.subtype === "雜事";
+}
+function monthlyStats(scoped) {
+  const pending = scoped.filter(i => i.kind === "task" && i.status !== "完成")
+    .reduce((sum, i) => sum + (i.estHours || 0), 0);
+  let logged = 0;
+  scoped.forEach(i => (workLogs[i.id] || []).forEach(l => {
+    if (l.date && l.date.startsWith(CURRENT_MONTH)) logged += Number(l.hours) || 0;
+  }));
+  return { pending, logged: Math.round(logged * 10) / 10 };
+}
+function specProgress(spec) {
+  const total = spec.tasks.length;
+  const done = spec.tasks.filter(t => t.status === "完成").length;
+  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+
+/* ================= auth screen (#48) ================= */
+function renderAuthScreen() {
+  const demoButtons = ACCOUNTS.map(a => `
+    <button type="button" class="btn btn-ghost btn-sm" data-demo-login="${a.id}">${escapeHtml(a.name)}（${a.role}）</button>
+  `).join("");
+  return `
+    <div class="auth-shell">
+      <div class="auth-card">
+        <div class="brand" style="justify-content:center; margin-bottom:20px;">
+          <div class="brand-mark">◆</div>
+          <div class="brand-text">
+            <div class="brand-name">工作台</div>
+            <div class="brand-sub">團隊任務 · 個人雜事</div>
+          </div>
+        </div>
+        <div class="tabs" style="width:100%; margin-bottom:18px;">
+          <button type="button" class="tab ${state.authMode === "login" ? "active" : ""}" data-authmode="login" style="flex:1;">登入</button>
+          <button type="button" class="tab ${state.authMode === "register" ? "active" : ""}" data-authmode="register" style="flex:1;">註冊</button>
+        </div>
+        <form id="auth-form">
+          <div class="field">
+            <label>帳號名稱</label>
+            <input id="auth-name" type="text" placeholder="輸入名字" autocomplete="username" />
+          </div>
+          <div class="field">
+            <label>密碼</label>
+            <input id="auth-password" type="password" placeholder="輸入密碼" autocomplete="current-password" />
+          </div>
+          <p class="form-error" ${state.authError ? "" : 'style="display:none;"'}>${state.authError || ""}</p>
+          <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:4px;">
+            ${state.authMode === "login" ? "登入" : "註冊並登入"}
+          </button>
+        </form>
+        <div class="auth-divider">或使用示範帳號快速登入</div>
+        <div class="demo-accounts">${demoButtons}</div>
+        <p class="auth-note">輕量帳號機制：不含 email 驗證、忘記密碼流程。系統裡第一個註冊的帳號自動成為管理職，之後預設為一般同仁（原型示意，不會真的檢查密碼）。</p>
+      </div>
+    </div>
+  `;
+}
+function wireAuth() {
+  document.querySelectorAll("[data-authmode]").forEach(btn => {
+    btn.addEventListener("click", () => { state.authMode = btn.dataset.authmode; state.authError = null; renderApp(); });
+  });
+  document.querySelectorAll("[data-demo-login]").forEach(btn => {
+    btn.addEventListener("click", () => logIn(ACCOUNTS.find(a => a.id === btn.dataset.demoLogin)));
+  });
+  document.getElementById("auth-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = document.getElementById("auth-name").value.trim();
+    if (!name) { state.authError = "請填寫帳號名稱與密碼"; renderApp(); return; }
+    if (state.authMode === "login") {
+      const acc = ACCOUNTS.find(a => a.name === name);
+      // 帳號不存在或密碼錯誤回傳同一種通用錯誤訊息（issue #46），不讓人分辨是哪個環節錯
+      if (!acc) { state.authError = "帳號不存在或密碼錯誤"; renderApp(); return; }
+      logIn(acc);
+    } else {
+      if (ACCOUNTS.some(a => a.name === name)) { state.authError = "此名稱已被使用，請換一個"; renderApp(); return; }
+      const role = ACCOUNTS.length === 0 ? "管理職" : "一般同仁"; // 第一個註冊的帳號自動成為管理職（issue #45）
+      const acc = { id: "a" + Date.now(), name, role };
+      ACCOUNTS.push(acc);
+      logIn(acc);
+    }
+  });
+}
+function logIn(acc) {
+  state.authed = true;
+  state.currentAccount = acc;
+  state.viewerName = acc.name;
+  state.authError = null;
+  state.activeTab = "kanban";
+  state.selectedId = null;
+  renderApp();
+}
+function logOut() {
+  state.authed = false;
+  state.currentAccount = null;
+  state.selectedId = null;
+  state.quickAdd = null;
+  renderApp();
+}
+
+/* ================= topbar ================= */
+function renderTopbar() {
+  const acc = state.currentAccount;
+  const admin = isAdmin(acc);
+  const scopeExtra = state.scopeMode === "person"
+    ? `<select class="scope-person-select" id="scope-person-select">
+         <option value="">選擇同仁</option>
+         ${ACCOUNTS.filter(a => a.id !== acc.id).map(a =>
+           `<option value="${escapeHtml(a.name)}" ${a.name === state.scopePersonName ? "selected" : ""}>${escapeHtml(a.name)}</option>`
+         ).join("")}
+       </select>`
+    : "";
+  return `
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">◆</div>
+        <div class="brand-text">
+          <div class="brand-name">工作台</div>
+          <div class="brand-sub">團隊任務 · 個人雜事</div>
+        </div>
+      </div>
+      <nav class="tabs">
+        <button class="tab ${state.activeTab === "kanban" ? "active" : ""}" data-tab="kanban">看板</button>
+        <button class="tab ${state.activeTab === "requirements" ? "active" : ""}" data-tab="requirements">需求管理</button>
+        ${admin ? `<button class="tab ${state.activeTab === "accounts" ? "active" : ""}" data-tab="accounts">帳號管理</button>` : ""}
+      </nav>
+      <div class="identity">
+        <div class="viewer-field">
+          <span class="avatar" style="background:${avatarColor(acc.name)}">${initials(acc.name)}</span>
+          <span style="font-size:13px; font-weight:600;">${escapeHtml(acc.name)}</span>
+          <span class="role-badge ${admin ? "admin" : "member"}">${acc.role}</span>
+        </div>
+        <div class="scope-seg">
+          <button data-scope="self" class="${state.scopeMode === "self" ? "active" : ""}">我</button>
+          <button data-scope="all" class="${state.scopeMode === "all" ? "active" : ""}">全觀</button>
+          <button data-scope="person" class="${state.scopeMode === "person" ? "active" : ""}">同仁</button>
+        </div>
+        ${scopeExtra}
+        <button class="btn btn-text btn-sm" id="logout-btn">登出</button>
+      </div>
+    </header>
+  `;
+}
+
+/* ================= Kanban tab ================= */
+function renderKanbanTab() {
+  const admin = isAdmin(state.currentAccount);
+  const scoped = personScopedItems(state.scopeMode, state.viewerName, state.scopePersonName);
+  const stats = monthlyStats(scoped);
+  const visible = scoped.filter(i => matchesTypeFilter(i, state.typeFilter));
+
+  const chips = TYPE_FILTERS.map(f =>
+    `<button class="chip ${f === state.typeFilter ? "active" : ""}" data-filter="${f}">${f}</button>`
+  ).join("");
+
+  const columns = COLUMNS.map(col => {
+    const cardsInCol = visible.filter(i => statusColumn(i) === col);
+    const cards = cardsInCol.map(item => renderCard(item)).join("");
+    return `
+      <div class="column" data-col="${col}">
+        <div class="column-head">
+          <h3>${col}</h3>
+          <span class="column-count">${cardsInCol.length}</span>
+        </div>
+        ${cards || `<div class="empty-panel" style="padding:24px 8px;">目前沒有項目</div>`}
+      </div>
+    `;
+  }).join("");
+
+  const recentlyCompleted = visible.filter(i => statusColumn(i) === "完成" && i.closedDate === TODAY);
+  const recentBlock = recentlyCompleted.length ? `
+    <details class="recently-completed" open>
+      <summary>剛完成（今天） <span class="column-count">${recentlyCompleted.length}</span></summary>
+      <div class="recently-completed-grid">
+        ${recentlyCompleted.map(item => renderCard(item)).join("")}
+      </div>
+    </details>
+  ` : "";
+
+  return `
+    <div class="toolbar-row">
+      <div class="stat-card">
+        <div class="stat-icon">⏳</div>
+        <div><div class="stat-label">本月待處理工時</div><div class="stat-value">${stats.pending}h</div></div>
+      </div>
+      <div class="stat-card done">
+        <div class="stat-icon">✅</div>
+        <div><div class="stat-label">本月已投入工時</div><div class="stat-value">${stats.logged}h</div></div>
+      </div>
+      <div class="quick-actions">
+        <button class="btn btn-ghost" data-quickadd-open="reminder">+ 提醒</button>
+        ${admin ? `<button class="btn btn-primary" data-quickadd-open="task">+ 任務</button>` : ""}
+      </div>
+    </div>
+    <div class="filter-row">${chips}</div>
+    <div class="board-layout ${state.selectedId ? "with-panel" : ""}">
+      <div class="board-main">
+        <div class="columns">${columns}</div>
+        ${recentBlock}
+      </div>
+      ${state.selectedId ? renderDetailPanel() : ""}
+    </div>
+  `;
+}
+
+function renderCard(item) {
+  const due = fmtDue(item.due);
+  const selected = state.selectedId === item.id ? "selected" : "";
+  return `
+    <div class="card pri-${item.priority}-bar ${selected}" draggable="${item.kind === "task"}" data-id="${item.id}">
+      <div class="card-badges">
+        ${typeBadge(item)}
+        <span class="dot pri-${item.priority}"></span>
+        <span class="status-pill status-${item.status}">${item.status}</span>
+      </div>
+      <div class="card-title">${escapeHtml(item.title)}</div>
+      <div class="card-meta">
+        ${avatarsHtml(item.owners)}
+        <span class="due-pill ${due.overdue ? "overdue" : ""}">${due.text}</span>
+        ${item.spec ? `<span class="card-spec">📎 ${escapeHtml(item.spec)}</span>` : ""}
+      </div>
+      ${item.kind === "task" && item.status === "進行中"
+        ? `<button class="complete-btn" data-complete="${item.id}">✓ 標記完成</button>` : ""}
+    </div>
+  `;
+}
+
+function renderDetailPanel() {
+  const item = items.find(i => i.id === state.selectedId);
+  if (!item) return "";
+  const logs = workLogs[item.id] || [];
+  const due = fmtDue(item.due);
+
+  let actions = "";
+  if (item.kind === "task") {
+    if (item.status === "待處理") actions += `<button class="btn btn-primary btn-sm" data-action="start">▶ 開始</button>`;
+    if (item.status === "進行中") {
+      actions += `<button class="btn btn-ghost btn-sm" data-action="pause">⏸ 暫停</button>`;
+      actions += `<button class="btn btn-primary btn-sm" data-action="complete">✓ 完成</button>`;
+    }
+    if (item.status === "暫停") actions += `<button class="btn btn-primary btn-sm" data-action="resume">▶ 恢復</button>`;
+  }
+
+  return `
+    <div class="panel">
+      <div class="panel-head">
+        <h2>${escapeHtml(item.title)}</h2>
+        <button class="panel-close" data-close-panel>✕</button>
+      </div>
+      <div class="panel-badges">
+        ${typeBadge(item)}
+        <span class="status-pill status-${item.status}">${item.status}</span>
+        <span class="dot pri-${item.priority}"></span>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-section-label">基本資訊</div>
+        ${item.spec ? `<div class="panel-row"><span>所屬規格</span><span>${escapeHtml(item.spec)}</span></div>` : ""}
+        <div class="panel-row"><span>指派給</span><span>${item.owners.join("、")}</span></div>
+        <div class="panel-row"><span>到期日</span><span>${due.text}</span></div>
+        ${item.estHours ? `<div class="panel-row"><span>預計工時</span><span>${item.estHours}h</span></div>` : ""}
+        ${item.from ? `<div class="panel-row"><span>來源</span><span>${escapeHtml(item.from)}</span></div>` : ""}
+      </div>
+
+      <div class="panel-actions">${actions}</div>
+
+      <div class="panel-section">
+        <div class="panel-section-label">報工記錄（全體同仁可見）</div>
+        ${logs.length ? logs.map(l => `
+          <div class="worklog-entry">
+            <span class="worklog-date">${l.date.slice(5)}</span>
+            <span class="worklog-person">${escapeHtml(l.person || "")}</span>
+            <span class="worklog-note">${escapeHtml(l.note || "")}</span>
+            <span class="worklog-hours">${l.hours}h</span>
+          </div>
+        `).join("") : `<div class="worklog-entry"><span class="worklog-note">尚無報工記錄</span></div>`}
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-section-label">新增報工</div>
+        <form id="worklog-form" class="inline-form" style="margin-top:0;">
+          <select id="wl-person">${accountOptions(state.currentAccount.name)}</select>
+          <input id="wl-date" type="date" value="${TODAY}" />
+          <input id="wl-hours" type="number" step="0.5" placeholder="時數" style="width:80px;" />
+          <input id="wl-note" type="text" placeholder="備註" style="flex:1; min-width:100px;" />
+          <button type="submit" class="btn btn-primary btn-sm">送出</button>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+/* ================= quick add slide-over (task creation admin-only, issue #47/#51) ================= */
+function renderQuickAdd() {
+  if (!state.quickAdd) return "";
+  const isTask = state.quickAdd === "task";
+  const specOptions = requirementsData.flatMap(r => r.specs.map(s => ({ id: s.id, label: `${r.title} / ${s.title}` })));
+
+  return `
+    <div class="overlay" id="quickadd-overlay">
+      <div class="slideover">
+        <h2>${isTask ? "新增任務" : "新增提醒"}</h2>
+        <div class="hint">${isTask ? "任務掛在既有規格底下，可指派給多人。" : "提醒不受規格限制，任何人都能互相建立（issue #50：對象改從帳號名單選）。"}</div>
+        <form id="quickadd-form">
+          ${isTask ? `
+            <div class="field">
+              <label>所屬規格</label>
+              <select id="qa-spec">
+                <option value="">選擇規格</option>
+                ${specOptions.map(s => `<option value="${s.id}">${escapeHtml(s.label)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="field">
+              <label>任務類型</label>
+              <select id="qa-type">
+                <option value="開發任務">開發任務</option>
+                <option value="測試任務">測試任務</option>
+              </select>
+            </div>
+          ` : `
+            <div class="field">
+              <label>對象</label>
+              <select id="qa-target">${accountOptions(state.currentAccount.name)}</select>
+            </div>
+          `}
+          <div class="field">
+            <label>標題</label>
+            <input id="qa-title" type="text" placeholder="${isTask ? "例如：登入 API 開發" : "例如：幫忙確認測試環境"}" />
+          </div>
+          ${isTask ? `
+            <div class="field">
+              <label>指派對象</label>
+              <div id="qa-assignees">
+                <div class="assignee-row"><select class="qa-assignee-select">${accountOptions(state.currentAccount.name)}</select></div>
+              </div>
+              <button type="button" class="btn btn-ghost btn-sm" id="qa-add-assignee" style="margin-top:4px;">+ 新增指派對象</button>
+            </div>
+          ` : ""}
+          <div class="field">
+            <label>優先級</label>
+            <select id="qa-priority">
+              <option value="高">高</option>
+              <option value="中" selected>中</option>
+              <option value="低">低</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>到期日（選填）</label>
+            <input id="qa-due" type="date" />
+          </div>
+          <p class="form-error" id="qa-error" style="display:none;"></p>
+          <div class="form-footer">
+            <button type="button" class="btn btn-ghost" id="qa-cancel">取消</button>
+            <button type="submit" class="btn btn-primary">送出</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+/* ================= Requirements tab (creation admin-only, issue #51) ================= */
+function renderRequirementsTab() {
+  const admin = isAdmin(state.currentAccount);
+  const cards = requirementsData.map(req => renderRequirementCard(req, admin)).join("");
+  return `
+    <div class="req-toolbar">
+      <h1>需求 / 規格 / 任務管理</h1>
+    </div>
+    ${admin ? `
+      <div class="req-card" style="padding:14px 18px;">
+        <div class="inline-form" style="margin-top:0;">
+          <input id="new-req-title" type="text" placeholder="新需求標題" style="flex:1; min-width:200px;" value="${escapeHtml(state.newReqTitle)}" />
+          <button class="btn btn-primary btn-sm" id="new-req-submit">+ 新增需求</button>
+        </div>
+      </div>
+    ` : `
+      <div class="readonly-note">僅管理職可以新增需求、規格與任務——一般同仁可以檢視進度、建立提醒與報工（issue #51）。</div>
+    `}
+    ${cards}
+  `;
+}
+
+function renderRequirementCard(req, admin) {
+  const expanded = state.expandedReqs.has(req.id);
+  const totalTasks = req.specs.reduce((s, sp) => s + sp.tasks.length, 0);
+  const doneTasks = req.specs.reduce((s, sp) => s + sp.tasks.filter(t => t.status === "完成").length, 0);
+
+  return `
+    <div class="req-card ${expanded ? "expanded" : ""}">
+      <div class="req-head" data-toggle-req="${req.id}">
+        <span class="req-chevron">▸</span>
+        <span class="req-title">${escapeHtml(req.title)}</span>
+        <span class="status-pill status-${req.status}">${req.status}</span>
+        <span class="req-progress-mini">${doneTasks}/${totalTasks} 任務完成</span>
+      </div>
+      <div class="req-body">
+        ${req.specs.map(spec => renderSpecRow(req, spec, admin)).join("")}
+        ${admin ? (state.reqSpecFormOpen === req.id ? renderNewSpecForm(req) :
+          `<button class="add-inline-btn" data-open-spec-form="${req.id}">+ 新增規格</button>`) : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderSpecRow(req, spec, admin) {
+  const prog = specProgress(spec);
+  return `
+    <div class="spec-row" style="align-items:flex-start;">
+      <div class="spec-main">
+        <div class="spec-title">${escapeHtml(spec.title)} <span style="font-weight:400; color:var(--text-faint); font-size:11px;">· 預計 ${spec.estHours}h</span></div>
+        <div class="progress-track"><div class="progress-fill" style="width:${prog.pct}%"></div></div>
+        <div class="spec-progress-label">${prog.done}/${prog.total} 任務完成 · ${avatarsHtml(spec.assignees)}</div>
+        <div class="spec-tasks">
+          ${spec.tasks.map(t => `
+            <div class="task-row">
+              <span class="badge badge-task">${t.type}</span>
+              <span class="task-title">${escapeHtml(t.title)}</span>
+              ${avatarsHtml(t.assignees)}
+              <span class="status-pill status-${t.status}">${t.status}</span>
+            </div>
+          `).join("")}
+        </div>
+        ${admin ? (state.specTaskFormOpen === spec.id ? renderNewTaskForm(spec) :
+          `<button class="add-inline-btn" data-open-task-form="${spec.id}">+ 新增任務</button>`) : ""}
+      </div>
+    </div>
+  `;
+}
+
+function renderNewSpecForm(req) {
+  return `
+    <div class="inline-form" data-spec-form-for="${req.id}">
+      <input type="text" id="new-spec-title-${req.id}" placeholder="新規格標題" style="flex:1; min-width:160px;" />
+      <input type="number" id="new-spec-hours-${req.id}" placeholder="預計工時" style="width:90px;" />
+      <button class="btn btn-primary btn-sm" data-submit-spec="${req.id}">送出</button>
+      <button class="btn btn-text btn-sm" data-cancel-spec="${req.id}">取消</button>
+    </div>
+  `;
+}
+
+function renderNewTaskForm(spec) {
+  return `
+    <div class="inline-form" data-task-form-for="${spec.id}">
+      <select id="new-task-type-${spec.id}">
+        <option value="開發任務">開發任務</option>
+        <option value="測試任務">測試任務</option>
+      </select>
+      <input type="text" id="new-task-title-${spec.id}" placeholder="任務標題" style="flex:1; min-width:140px;" />
+      <select id="new-task-assignee-${spec.id}">${accountOptions(state.currentAccount.name)}</select>
+      <button class="btn btn-primary btn-sm" data-submit-task="${spec.id}">送出</button>
+      <button class="btn btn-text btn-sm" data-cancel-task="${spec.id}">取消</button>
+    </div>
+  `;
+}
+
+/* ================= Accounts tab (issue #51) ================= */
+function renderAccountsTab() {
+  const rows = ACCOUNTS.map(a => `
+    <div class="account-row">
+      <span class="avatar" style="background:${avatarColor(a.name)}">${initials(a.name)}</span>
+      <span class="account-name">${escapeHtml(a.name)}</span>
+      <span class="role-badge ${a.role === "管理職" ? "admin" : "member"}">${a.role}</span>
+      ${a.role === "一般同仁"
+        ? `<button class="btn btn-ghost btn-sm" data-promote="${a.id}">升級為管理職</button>`
+        : `<span class="due-pill">—</span>`}
+    </div>
+  `).join("");
+  return `
+    <div class="req-toolbar"><h1>帳號管理</h1></div>
+    <div class="readonly-note">列出所有帳號與角色；只有管理職看得到這個頁面與「升級為管理職」操作。</div>
+    <div class="req-card" style="padding:6px 18px 4px;">${rows}</div>
+  `;
+}
+function wireAccounts() {
+  document.querySelectorAll("[data-promote]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const acc = ACCOUNTS.find(a => a.id === btn.dataset.promote);
+      acc.role = "管理職";
+      renderApp();
+    });
+  });
+}
+
+/* ================= root render + wiring ================= */
+function renderApp() {
+  if (!state.authed) {
+    document.getElementById("app").innerHTML = renderAuthScreen();
+    wireAuth();
+    return;
+  }
+  const body = state.activeTab === "kanban" ? renderKanbanTab()
+    : state.activeTab === "requirements" ? renderRequirementsTab()
+    : renderAccountsTab();
+  document.getElementById("app").innerHTML = `
+    ${renderTopbar()}
+    <div id="page">${body}</div>
+    ${renderQuickAdd()}
+  `;
+  wireAll();
+}
+
+function wireAll() {
+  document.querySelectorAll("[data-tab]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.activeTab = btn.dataset.tab;
+      state.selectedId = null;
+      const url = new URL(location.href);
+      url.searchParams.set("tab", state.activeTab);
+      history.replaceState(null, "", url);
+      renderApp();
+    });
+  });
+
+  document.getElementById("logout-btn").addEventListener("click", logOut);
+
+  document.querySelectorAll("[data-scope]").forEach(btn => {
+    btn.addEventListener("click", () => { state.scopeMode = btn.dataset.scope; renderApp(); });
+  });
+  const scopePersonSelect = document.getElementById("scope-person-select");
+  if (scopePersonSelect) scopePersonSelect.addEventListener("change", () => { state.scopePersonName = scopePersonSelect.value; renderApp(); });
+
+  if (state.activeTab === "kanban") wireKanban();
+  else if (state.activeTab === "requirements") wireRequirements();
+  else wireAccounts();
+  wireQuickAdd();
+}
+
+function wireKanban() {
+  document.querySelectorAll("[data-filter]").forEach(chip => {
+    chip.addEventListener("click", () => { state.typeFilter = chip.dataset.filter; renderApp(); });
+  });
+  document.querySelectorAll(".card").forEach(card => {
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("[data-complete]")) return;
+      state.selectedId = Number(card.dataset.id);
+      renderApp();
+    });
+    card.addEventListener("dragstart", () => { state.dragSrcId = Number(card.dataset.id); card.classList.add("dragging"); });
+    card.addEventListener("dragend", () => card.classList.remove("dragging"));
+  });
+  document.querySelectorAll("[data-complete]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const item = items.find(i => i.id === Number(btn.dataset.complete));
+      item.status = "完成";
+      item.closedDate = TODAY;
+      renderApp();
+    });
+  });
+  document.querySelectorAll(".column").forEach(col => {
+    col.addEventListener("dragover", e => { e.preventDefault(); col.classList.add("dragover"); });
+    col.addEventListener("dragleave", () => col.classList.remove("dragover"));
+    col.addEventListener("drop", () => {
+      col.classList.remove("dragover");
+      const item = items.find(i => i.id === state.dragSrcId);
+      if (!item || item.kind !== "task") return;
+      // 待處理/進行中/暫停 之間任意調整；「完成」沒有常駐欄位可拖入（ADR-0002），改用卡片上的按鈕
+      item.status = col.dataset.col;
+      renderApp();
+    });
+  });
+  const closeBtn = document.querySelector("[data-close-panel]");
+  if (closeBtn) closeBtn.addEventListener("click", () => { state.selectedId = null; renderApp(); });
+
+  document.querySelectorAll("[data-action]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const item = items.find(i => i.id === state.selectedId);
+      if (!item) return;
+      const action = btn.dataset.action;
+      if (action === "start") item.status = "進行中";
+      if (action === "pause") item.status = "暫停";
+      if (action === "resume") item.status = "進行中";
+      if (action === "complete") { item.status = "完成"; item.closedDate = TODAY; }
+      renderApp();
+    });
+  });
+
+  const wlForm = document.getElementById("worklog-form");
+  if (wlForm) wlForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const person = document.getElementById("wl-person").value;
+    const date = document.getElementById("wl-date").value;
+    const hours = Number(document.getElementById("wl-hours").value);
+    const note = document.getElementById("wl-note").value.trim();
+    if (!person || !date || !hours) return;
+    const id = state.selectedId;
+    workLogs[id] = workLogs[id] || [];
+    workLogs[id].push({ date, hours, note, person });
+    renderApp();
+  });
+
+  document.querySelectorAll("[data-quickadd-open]").forEach(btn => {
+    btn.addEventListener("click", () => { state.quickAdd = btn.dataset.quickaddOpen; renderApp(); });
+  });
+}
+
+function wireQuickAdd() {
+  const overlay = document.getElementById("quickadd-overlay");
+  if (!overlay) return;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) { state.quickAdd = null; renderApp(); } });
+  document.getElementById("qa-cancel").addEventListener("click", () => { state.quickAdd = null; renderApp(); });
+
+  const addAssigneeBtn = document.getElementById("qa-add-assignee");
+  if (addAssigneeBtn) addAssigneeBtn.addEventListener("click", () => {
+    const wrap = document.getElementById("qa-assignees");
+    const row = document.createElement("div");
+    row.className = "assignee-row";
+    row.innerHTML = `<select class="qa-assignee-select">${accountOptions("")}</select><button type="button" class="icon-btn">−</button>`;
+    row.querySelector(".icon-btn").addEventListener("click", () => row.remove());
+    wrap.appendChild(row);
+  });
+
+  document.getElementById("quickadd-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const title = document.getElementById("qa-title").value.trim();
+    const priority = document.getElementById("qa-priority").value;
+    const due = document.getElementById("qa-due").value || null;
+    const errorEl = document.getElementById("qa-error");
+    if (!title) { errorEl.textContent = "請填寫標題"; errorEl.style.display = "block"; return; }
+
+    const nextId = Math.max(...items.map(i => i.id)) + 1;
+    if (state.quickAdd === "task") {
+      const specSelect = document.getElementById("qa-spec");
+      const specLabel = specSelect.options[specSelect.selectedIndex]?.text;
+      if (!specSelect.value) { errorEl.textContent = "請選擇所屬規格"; errorEl.style.display = "block"; return; }
+      const owners = Array.from(document.querySelectorAll("#qa-assignees select"))
+        .map(s => s.value).filter(Boolean);
+      items.push({
+        id: nextId, kind: "task", subtype: document.getElementById("qa-type").value,
+        title, spec: specLabel.split(" / ").pop(), priority, due, status: "待處理",
+        from: null, owners: owners.length ? owners : [state.currentAccount.name], estHours: 8,
+      });
+    } else {
+      const targetName = document.getElementById("qa-target").value;
+      const self = targetName === state.currentAccount.name;
+      items.push({
+        id: nextId, kind: "reminder", subtype: self ? "雜事" : "同仁提醒", title, spec: null, priority, due,
+        status: "未處理", from: self ? "自己" : state.currentAccount.name, owners: [targetName],
+      });
+    }
+    state.quickAdd = null;
+    renderApp();
+  });
+}
+
+function wireRequirements() {
+  document.querySelectorAll("[data-toggle-req]").forEach(head => {
+    head.addEventListener("click", () => {
+      const id = head.dataset.toggleReq;
+      if (state.expandedReqs.has(id)) state.expandedReqs.delete(id); else state.expandedReqs.add(id);
+      renderApp();
+    });
+  });
+
+  document.querySelectorAll("[data-open-spec-form]").forEach(btn => {
+    btn.addEventListener("click", (e) => { e.stopPropagation(); state.reqSpecFormOpen = btn.dataset.openSpecForm; renderApp(); });
+  });
+  document.querySelectorAll("[data-cancel-spec]").forEach(btn => {
+    btn.addEventListener("click", (e) => { e.stopPropagation(); state.reqSpecFormOpen = null; renderApp(); });
+  });
+  document.querySelectorAll("[data-submit-spec]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const reqId = btn.dataset.submitSpec;
+      const req = requirementsData.find(r => r.id === reqId);
+      const title = document.getElementById(`new-spec-title-${reqId}`).value.trim();
+      const hours = Number(document.getElementById(`new-spec-hours-${reqId}`).value) || 0;
+      if (!title) return;
+      req.specs.push({ id: "s" + Date.now(), title, estHours: hours, assignees: [state.currentAccount.name], tasks: [] });
+      state.reqSpecFormOpen = null;
+      renderApp();
+    });
+  });
+
+  document.querySelectorAll("[data-open-task-form]").forEach(btn => {
+    btn.addEventListener("click", (e) => { e.stopPropagation(); state.specTaskFormOpen = btn.dataset.openTaskForm; renderApp(); });
+  });
+  document.querySelectorAll("[data-cancel-task]").forEach(btn => {
+    btn.addEventListener("click", (e) => { e.stopPropagation(); state.specTaskFormOpen = null; renderApp(); });
+  });
+  document.querySelectorAll("[data-submit-task]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const specId = btn.dataset.submitTask;
+      const spec = requirementsData.flatMap(r => r.specs).find(s => s.id === specId);
+      const type = document.getElementById(`new-task-type-${specId}`).value;
+      const title = document.getElementById(`new-task-title-${specId}`).value.trim();
+      const assignee = document.getElementById(`new-task-assignee-${specId}`).value || state.currentAccount.name;
+      if (!title) return;
+      spec.tasks.push({ id: "t" + Date.now(), type, title, status: "待處理", assignees: [assignee] });
+      state.specTaskFormOpen = null;
+      renderApp();
+    });
+  });
+
+  const newReqTitleInput = document.getElementById("new-req-title");
+  if (newReqTitleInput) newReqTitleInput.addEventListener("input", () => { state.newReqTitle = newReqTitleInput.value; });
+  const newReqSubmit = document.getElementById("new-req-submit");
+  if (newReqSubmit) newReqSubmit.addEventListener("click", () => {
+    if (!state.newReqTitle.trim()) return;
+    requirementsData.unshift({ id: "r" + Date.now(), title: state.newReqTitle.trim(), status: "待處理", specs: [] });
+    state.newReqTitle = "";
+    renderApp();
+  });
+}
+
+renderApp();
+</script>
+</body>
+</html>
