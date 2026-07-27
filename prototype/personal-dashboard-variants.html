@@ -1,0 +1,750 @@
+<!--
+  PROTOTYPE — throwaway. Not production code.
+  Plan: variants of the personal/team dashboard — A: priority-queue list,
+  B: kanban-by-status, C: grouped-by-urgency + detail panel, D: merged
+  B+C (kanban + detail panel) with a person switcher (我/同仁/全觀) and a
+  monthly pending-vs-logged-hours summary; "完成" is not a persistent kanban
+  column in D — items surface in a "剛完成（今天）" strip only on the day
+  they close, then drop off the board and live only in the monthly stats.
+  Switchable via ?variant=A|B|C|D, on this standalone throwaway page
+  (sub-shape B — the real app doesn't exist yet, this is the first UI artifact).
+  Run: just open this file in a browser. No build step, no server needed.
+-->
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>PROTOTYPE — 個人待辦儀表板</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e2e4e9;
+    --text: #1b1e24;
+    --text-dim: #6b7280;
+    --accent: #3b5bfd;
+    --high: #e5484d;
+    --mid: #f2a33c;
+    --low: #8a8f98;
+    --todo: #8a8f98;
+    --doing: #3b5bfd;
+    --paused: #f2a33c;
+    --done: #2fb344;
+    --closed: #2fb344;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181d;
+      --surface: #1e2128;
+      --border: #2c2f36;
+      --text: #e7e9ee;
+      --text-dim: #9aa0ab;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  #app { max-width: 980px; margin: 0 auto; padding: 24px 20px 100px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; }
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-task { background: #e6ebff; color: #3b5bfd; }
+  .badge-reminder { background: #fff2e0; color: #b06a00; }
+  .badge-chore { background: #f0eaff; color: #7038d8; }
+  @media (prefers-color-scheme: dark) {
+    .badge-task { background: #232c55; color: #9db0ff; }
+    .badge-reminder { background: #4a3818; color: #ffcf8a; }
+    .badge-chore { background: #35275c; color: #cbb2ff; }
+  }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
+  .pri-高 { background: var(--high); }
+  .pri-中 { background: var(--mid); }
+  .pri-低 { background: var(--low); }
+  .status-pill {
+    font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); color: var(--text-dim);
+  }
+  .status-待處理 { color: var(--todo); border-color: var(--todo); }
+  .status-進行中 { color: var(--doing); border-color: var(--doing); }
+  .status-暫停 { color: var(--paused); border-color: var(--paused); }
+  .status-完成, .status-已結案 { color: var(--done); border-color: var(--done); }
+  .status-未處理 { color: var(--todo); border-color: var(--todo); }
+
+  .filter-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-chip {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    padding: 5px 12px; border-radius: 999px; font-size: 12px; cursor: pointer;
+  }
+  .filter-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* ---- Variant A: priority queue list ---- */
+  .queue-row {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 8px; cursor: grab;
+  }
+  .queue-row.dragging { opacity: 0.4; }
+  .drag-handle { color: var(--text-dim); font-size: 14px; cursor: grab; user-select: none; }
+  .queue-main { flex: 1; min-width: 0; }
+  .queue-title { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .queue-meta { font-size: 12px; color: var(--text-dim); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .manual-flag { font-size: 10px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 1px 6px; }
+
+  /* ---- Variant B: kanban ---- */
+  .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: start; }
+  .column { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; min-height: 120px; }
+  .column h3 { font-size: 13px; margin: 0 0 10px; color: var(--text-dim); display: flex; justify-content: space-between; }
+  .card {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;
+    font-size: 13px; cursor: grab;
+  }
+  .card.dragging { opacity: 0.4; }
+  .card-title { font-weight: 500; margin-bottom: 4px; }
+  .card-meta { font-size: 11px; color: var(--text-dim); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .column.dragover { outline: 2px dashed var(--accent); outline-offset: -4px; }
+
+  /* ---- Variant C: grouped + detail panel ---- */
+  .layout-c { display: grid; grid-template-columns: 1fr 320px; gap: 16px; align-items: start; }
+  .group { margin-bottom: 14px; }
+  .group summary {
+    cursor: pointer; font-size: 13px; font-weight: 600; padding: 8px 4px; color: var(--text-dim);
+    display: flex; justify-content: space-between;
+  }
+  .group summary .count { color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px; font-size: 11px; }
+  .item-row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    border: 1px solid transparent;
+  }
+  .item-row:hover { background: var(--surface); }
+  .item-row.selected { background: var(--surface); border-color: var(--accent); }
+  .item-row .queue-title { font-size: 13px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+    position: sticky; top: 16px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 10px; }
+  .panel label { font-size: 12px; color: var(--text-dim); display: block; margin: 10px 0 4px; }
+  .panel input, .panel select, .panel textarea {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); font-size: 13px;
+  }
+  .panel button {
+    margin-top: 12px; padding: 7px 12px; border-radius: 6px; border: none; background: var(--accent); color: white;
+    font-size: 13px; cursor: pointer;
+  }
+  .panel button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); margin-left: 6px; }
+  .worklog-entry { font-size: 12px; color: var(--text-dim); border-top: 1px solid var(--border); padding: 6px 0; }
+  .empty-panel { color: var(--text-dim); font-size: 13px; }
+
+  /* ---- Switcher ---- */
+  .switcher {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #1b1e24; color: white; border-radius: 999px; padding: 8px 6px;
+    display: flex; align-items: center; gap: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    font-size: 13px; z-index: 999;
+  }
+  .switcher button {
+    background: rgba(255,255,255,0.1); border: none; color: white; width: 30px; height: 30px;
+    border-radius: 50%; cursor: pointer; font-size: 14px;
+  }
+  .switcher button:hover { background: rgba(255,255,255,0.2); }
+  .switcher .label { padding: 0 10px; white-space: nowrap; }
+
+  @media (max-width: 800px) {
+    .board { grid-template-columns: 1fr 1fr; }
+    .layout-c { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ---------------- fake data ---------------- */
+const TODAY = "2026-07-26";
+
+let items = [
+  { id: 1,  kind: "task", subtype: "開發任務", title: "會員登入規格 - 開發", spec: "會員登入規格", priority: "高", due: "2026-07-27", status: "進行中", hasWorkLog: true, from: null, manualOrder: false, owner: "我", estHours: 16 },
+  { id: 2,  kind: "task", subtype: "測試任務", title: "訂單結帳規格 - 測試", spec: "訂單結帳規格", priority: "中", due: "2026-07-30", status: "待處理", hasWorkLog: false, from: null, manualOrder: false, owner: "小美", estHours: 8 },
+  { id: 3,  kind: "task", subtype: "開發任務", title: "報表匯出規格 - 開發", spec: "報表匯出規格", priority: "高", due: "2026-07-26", status: "暫停", hasWorkLog: true, from: null, manualOrder: false, note: "等待 SA 確認欄位", owner: "我", estHours: 24 },
+  { id: 4,  kind: "reminder", subtype: "同仁提醒", title: "幫忙建立 STB 專案的 git repo", spec: null, priority: "中", due: "2026-07-28", status: "未處理", hasWorkLog: false, from: "小美", manualOrder: false, owner: "我" },
+  { id: 5,  kind: "reminder", subtype: "規格相關提醒", title: "規格書欄位代號寫錯，通知 SA 調整", spec: "會員登入規格", priority: "低", due: null, status: "未處理", hasWorkLog: false, from: "自己（開發時發現）", manualOrder: false, owner: "我" },
+  { id: 6,  kind: "reminder", subtype: "雜事", title: "設定新同仁帳號權限", spec: null, priority: "中", due: "2026-07-29", status: "未處理", hasWorkLog: true, from: "自己", manualOrder: false, owner: "我" },
+  { id: 7,  kind: "reminder", subtype: "雜事", title: "整理季度工時報表給老闆", spec: null, priority: "高", due: "2026-07-31", status: "未處理", hasWorkLog: false, from: "自己", manualOrder: false, owner: "我" },
+  { id: 8,  kind: "task", subtype: "開發任務（重工第2回合）", title: "金流串接規格 - 開發", spec: "金流串接規格", priority: "高", due: "2026-07-27", status: "進行中", hasWorkLog: true, from: null, manualOrder: false, owner: "阿凱", estHours: 20 },
+  { id: 9,  kind: "reminder", subtype: "雜事", title: "訂會議室辦季度檢討", spec: null, priority: "低", due: "2026-08-03", status: "未處理", hasWorkLog: false, from: "自己", manualOrder: false, owner: "我" },
+  { id: 10, kind: "reminder", subtype: "同仁提醒", title: "幫忙看一下測試環境是不是掛了", spec: null, priority: "高", due: "2026-07-26", status: "已結案", hasWorkLog: true, from: "阿凱", manualOrder: false, owner: "我", closedDate: "2026-07-26" },
+  { id: 11, kind: "task", subtype: "測試任務", title: "會員登入規格 - 測試", spec: "會員登入規格", priority: "中", due: "2026-08-01", status: "待處理", hasWorkLog: false, from: null, manualOrder: false, owner: "小美", estHours: 8 },
+  { id: 12, kind: "task", subtype: "開發任務", title: "通知中心規格 - 開發", spec: "通知中心規格", priority: "中", due: "2026-07-20", status: "完成", hasWorkLog: true, from: null, manualOrder: false, owner: "阿凱", estHours: 12, closedDate: "2026-07-20" },
+  { id: 13, kind: "task", subtype: "測試任務", title: "報表匯出規格 - 測試", spec: "報表匯出規格", priority: "中", due: "2026-07-15", status: "完成", hasWorkLog: true, from: null, manualOrder: false, owner: "小美", estHours: 6, closedDate: "2026-07-15" },
+];
+
+let workLogs = {
+  1: [{ date: "2026-07-24", hours: 6, note: "完成登入 API" }, { date: "2026-07-25", hours: 4, note: "串接前端" }],
+  3: [{ date: "2026-07-22", hours: 8, note: "調整匯出邏輯" }],
+  6: [{ date: "2026-07-20", hours: 1, note: "設定帳號" }],
+  8: [{ date: "2026-07-25", hours: 5, note: "金流重工第 2 回合" }],
+  10: [{ date: "2026-07-26", hours: 0.5, note: "確認環境正常" }],
+  12: [{ date: "2026-07-18", hours: 10, note: "通知中心開發" }, { date: "2026-07-20", hours: 2, note: "最後修正" }],
+  13: [{ date: "2026-07-14", hours: 4, note: "報表測試" }, { date: "2026-07-15", hours: 2, note: "回歸測試" }],
+}; // itemId -> [{date, hours, note}]
+let selectedId = null;
+let personFilterD = "我";
+const PEOPLE = ["我", "小美", "阿凱", "全觀"];
+
+/* ---------------- helpers ---------------- */
+const PRI_ORDER = { 高: 0, 中: 1, 低: 2 };
+
+function typeBadge(item) {
+  if (item.kind === "task") return `<span class="badge badge-task">${item.subtype}</span>`;
+  if (item.subtype === "雜事") return `<span class="badge badge-chore">雜事</span>`;
+  return `<span class="badge badge-reminder">提醒</span>`;
+}
+
+function hybridSort(list) {
+  return [...list].sort((a, b) => {
+    if (a.manualOrder && !b.manualOrder) return -1;
+    if (!a.manualOrder && b.manualOrder) return 1;
+    if (a.manualOrder && b.manualOrder) return 0; // keep relative manual order (array order)
+    const p = PRI_ORDER[a.priority] - PRI_ORDER[b.priority];
+    if (p !== 0) return p;
+    if (!a.due && !b.due) return 0;
+    if (!a.due) return 1;
+    if (!b.due) return -1;
+    return a.due.localeCompare(b.due);
+  });
+}
+
+function fmtDue(due) {
+  if (!due) return "無期限";
+  if (due < TODAY) return `已過期 (${due})`;
+  if (due === TODAY) return "今天到期";
+  return due;
+}
+
+function statusColumn(item) {
+  if (item.kind === "task") return item.status; // 待處理/進行中/暫停/完成
+  return item.status === "已結案" ? "完成" : "待處理";
+}
+
+function ownerTag(item) {
+  return `<span class="status-pill" style="border-color:var(--text-dim);">👤 ${item.owner}</span>`;
+}
+
+// 個人雜事對非本人（管理職/其他同仁）預設不可見，除非已報工
+function personScopedItems(personFilter) {
+  return items.filter(i => {
+    if (personFilter !== "全觀" && i.owner !== personFilter) return false;
+    if (i.subtype === "雜事" && !i.hasWorkLog && i.owner !== "我") return false;
+    return true;
+  });
+}
+
+function monthlyStats(scoped) {
+  const pending = scoped
+    .filter(i => i.kind === "task" && i.status !== "完成")
+    .reduce((sum, i) => sum + (i.estHours || 0), 0);
+  let done = 0;
+  scoped.forEach(i => {
+    (workLogs[i.id] || []).forEach(l => {
+      if (l.date && l.date.startsWith("2026-07")) done += Number(l.hours) || 0;
+    });
+  });
+  return { pending, done };
+}
+
+// 標記完成/結案時記錄結案日；離開完成狀態時清除，供「剛完成（今天）」判斷用
+function markStatus(item, newStatus) {
+  item.status = newStatus;
+  if (newStatus === "完成" || newStatus === "已結案") {
+    item.closedDate = item.closedDate || TODAY;
+  } else {
+    delete item.closedDate;
+  }
+}
+
+/* ---------------- Variant A: priority queue ---------------- */
+let filterA = "全部";
+let dragSrcId = null;
+
+function renderVariantA() {
+  const filtered = items.filter(i => {
+    if (filterA === "全部") return true;
+    if (filterA === "任務") return i.kind === "task";
+    if (filterA === "提醒") return i.kind === "reminder" && i.subtype !== "雜事";
+    if (filterA === "雜事") return i.subtype === "雜事";
+  });
+  const sorted = hybridSort(filtered);
+
+  const chips = ["全部", "任務", "提醒", "雜事"].map(f =>
+    `<button class="filter-chip ${f === filterA ? 'active' : ''}" data-filter="${f}">${f}</button>`
+  ).join("");
+
+  const rows = sorted.map(item => `
+    <div class="queue-row" draggable="true" data-id="${item.id}">
+      <span class="drag-handle">☰</span>
+      <span class="dot pri-${item.priority}"></span>
+      <div class="queue-main">
+        <div class="queue-title">
+          ${item.title} ${typeBadge(item)}
+          ${item.manualOrder ? '<span class="manual-flag">手動排序</span>' : ''}
+        </div>
+        <div class="queue-meta">
+          ${item.spec ? `<span>📎 ${item.spec}</span>` : ''}
+          <span>${fmtDue(item.due)}</span>
+          <span class="status-pill status-${item.status}">${item.status}</span>
+          ${item.hasWorkLog ? '<span>🕒 已報工</span>' : ''}
+          ${item.from ? `<span>來自：${item.from}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join("");
+
+  return `
+    <h1>A — 排序佇列清單</h1>
+    <div class="subtitle">任務、提醒、雜事全部攤平在同一條隊列裡；預設依優先級＋到期日排序，可拖曳手動覆蓋（拖過的項目會標記「手動排序」）。</div>
+    <div class="filter-row">${chips}</div>
+    <div id="queue-list">${rows}</div>
+  `;
+}
+
+function wireVariantA() {
+  document.querySelectorAll('[data-filter]').forEach(btn => {
+    btn.addEventListener('click', () => { filterA = btn.dataset.filter; renderApp(); });
+  });
+  const rows = document.querySelectorAll('.queue-row');
+  rows.forEach(row => {
+    row.addEventListener('dragstart', () => { dragSrcId = Number(row.dataset.id); row.classList.add('dragging'); });
+    row.addEventListener('dragend', () => row.classList.remove('dragging'));
+    row.addEventListener('dragover', e => e.preventDefault());
+    row.addEventListener('drop', () => {
+      const targetId = Number(row.dataset.id);
+      if (dragSrcId === null || dragSrcId === targetId) return;
+      const srcIdx = items.findIndex(i => i.id === dragSrcId);
+      const tgtIdx = items.findIndex(i => i.id === targetId);
+      const [moved] = items.splice(srcIdx, 1);
+      moved.manualOrder = true;
+      items.splice(tgtIdx, 0, moved);
+      renderApp();
+    });
+  });
+}
+
+/* ---------------- Variant B: kanban ---------------- */
+let filterB = "全部";
+const COLUMNS = ["待處理", "進行中", "暫停", "完成"];
+
+function renderVariantB() {
+  const filtered = items.filter(i => {
+    if (filterB === "全部") return true;
+    if (filterB === "任務") return i.kind === "task";
+    if (filterB === "提醒") return i.kind === "reminder";
+  });
+
+  const chips = ["全部", "任務", "提醒"].map(f =>
+    `<button class="filter-chip ${f === filterB ? 'active' : ''}" data-filterb="${f}">${f}</button>`
+  ).join("");
+
+  const columns = COLUMNS.map(col => {
+    const cards = filtered.filter(i => statusColumn(i) === col).map(item => `
+      <div class="card" draggable="true" data-id="${item.id}">
+        <div class="card-title">${item.title}</div>
+        <div class="card-meta">
+          ${typeBadge(item)}
+          <span class="dot pri-${item.priority}"></span>${item.priority}
+          <span>${fmtDue(item.due)}</span>
+          ${item.spec ? `<span>📎 ${item.spec}</span>` : ''}
+        </div>
+      </div>
+    `).join("");
+    return `
+      <div class="column" data-col="${col}">
+        <h3>${col} <span>${filtered.filter(i => statusColumn(i) === col).length}</span></h3>
+        ${cards}
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <h1>B — 看板（依狀態分欄）</h1>
+    <div class="subtitle">依任務狀態機分欄；提醒的「未處理」對應「待處理」欄、「已結案」對應「完成」欄。卡片可拖曳跨欄調整狀態。</div>
+    <div class="filter-row">${chips}</div>
+    <div class="board">${columns}</div>
+  `;
+}
+
+function wireVariantB() {
+  document.querySelectorAll('[data-filterb]').forEach(btn => {
+    btn.addEventListener('click', () => { filterB = btn.dataset.filterb; renderApp(); });
+  });
+  document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('dragstart', () => { dragSrcId = Number(card.dataset.id); card.classList.add('dragging'); });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+  });
+  document.querySelectorAll('.column').forEach(col => {
+    col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); });
+    col.addEventListener('dragleave', () => col.classList.remove('dragover'));
+    col.addEventListener('drop', () => {
+      col.classList.remove('dragover');
+      const item = items.find(i => i.id === dragSrcId);
+      if (!item) return;
+      const newCol = col.dataset.col;
+      if (item.kind === "task") {
+        markStatus(item, newCol);
+      } else {
+        markStatus(item, newCol === "完成" ? "已結案" : "未處理");
+      }
+      renderApp();
+    });
+  });
+}
+
+/* ---------------- Variant C: grouped + detail panel ---------------- */
+function groupFor(item) {
+  if (item.kind === "task" && item.status === "暫停") return "已擱置";
+  if (!item.due) return "沒有期限";
+  if (item.due <= TODAY) return "今天／已過期";
+  return "本週內";
+}
+
+function renderVariantC() {
+  const groups = { "今天／已過期": [], "本週內": [], "沒有期限": [], "已擱置": [] };
+  hybridSort(items).forEach(i => groups[groupFor(i)].push(i));
+
+  const groupsHtml = Object.entries(groups).map(([name, list]) => {
+    if (list.length === 0) return "";
+    const rows = list.map(item => `
+      <div class="item-row ${item.id === selectedId ? 'selected' : ''}" data-id="${item.id}">
+        <span class="dot pri-${item.priority}"></span>
+        <div class="queue-main">
+          <div class="queue-title">${item.title} ${typeBadge(item)}</div>
+          <div class="queue-meta">
+            ${item.spec ? `<span>📎 ${item.spec}</span>` : ''}
+            <span class="status-pill status-${item.status}">${item.status}</span>
+          </div>
+        </div>
+      </div>
+    `).join("");
+    return `
+      <details class="group" open>
+        <summary>${name} <span class="count">${list.length}</span></summary>
+        ${rows}
+      </details>
+    `;
+  }).join("");
+
+  const selected = items.find(i => i.id === selectedId);
+  const panel = selected ? renderDetailPanel(selected) : `<div class="panel"><div class="empty-panel">點左側項目查看詳情、報工或調整狀態。</div></div>`;
+
+  return `
+    <h1>C — 依急迫程度分組 + 詳情面板</h1>
+    <div class="subtitle">依到期急迫程度分組（今天／本週／無期限／已擱置），點項目在右側面板看詳情、報工、調整狀態，提醒可在此升級為正式任務。</div>
+    <div class="layout-c">
+      <div>${groupsHtml}</div>
+      ${panel}
+    </div>
+  `;
+}
+
+function renderDetailPanel(item) {
+  const logs = (workLogs[item.id] || []).map(l => `
+    <div class="worklog-entry">${l.date}｜${l.hours} 小時${l.note ? '｜' + l.note : ''}</div>
+  `).join("");
+
+  const statusOptions = item.kind === "task"
+    ? ["待處理", "進行中", "暫停", "完成"]
+    : ["未處理", "已結案"];
+
+  return `
+    <div class="panel">
+      <h2>${item.title}</h2>
+      <div class="queue-meta" style="margin-bottom:8px;">
+        ${typeBadge(item)} ${ownerTag(item)} ${item.spec ? `<span>📎 ${item.spec}</span>` : '<span>未掛勾規格</span>'}
+      </div>
+      ${item.from ? `<div style="font-size:12px;color:var(--text-dim);">建立者：${item.from}</div>` : ''}
+      ${item.note ? `<div style="font-size:12px;color:var(--text-dim);margin-top:4px;">備註：${item.note}</div>` : ''}
+
+      <label>狀態</label>
+      <select id="status-select">
+        ${statusOptions.map(s => `<option value="${s}" ${s === item.status ? 'selected' : ''}>${s}</option>`).join("")}
+      </select>
+
+      <label>新增報工</label>
+      <input type="date" id="wl-date" value="${TODAY}">
+      <input type="number" id="wl-hours" placeholder="投入時數" step="0.5" min="0" style="margin-top:6px;">
+      <textarea id="wl-note" placeholder="備註（例如：調整了哪段邏輯）" rows="2" style="margin-top:6px;"></textarea>
+      <button id="wl-submit">送出報工</button>
+
+      ${item.kind === "reminder" ? `<button class="secondary" id="promote-btn">升級為正式任務</button>` : ''}
+
+      ${logs ? `<div style="margin-top:14px;">${logs}</div>` : ''}
+    </div>
+  `;
+}
+
+function wireVariantC() {
+  document.querySelectorAll('.item-row').forEach(row => {
+    row.addEventListener('click', () => { selectedId = Number(row.dataset.id); renderApp(); });
+  });
+  const statusSelect = document.getElementById('status-select');
+  if (statusSelect) {
+    statusSelect.addEventListener('change', () => {
+      const item = items.find(i => i.id === selectedId);
+      markStatus(item, statusSelect.value);
+      renderApp();
+    });
+  }
+  const wlSubmit = document.getElementById('wl-submit');
+  if (wlSubmit) {
+    wlSubmit.addEventListener('click', () => {
+      const date = document.getElementById('wl-date').value;
+      const hours = document.getElementById('wl-hours').value;
+      const note = document.getElementById('wl-note').value;
+      if (!hours) return;
+      workLogs[selectedId] = workLogs[selectedId] || [];
+      workLogs[selectedId].push({ date, hours, note });
+      const item = items.find(i => i.id === selectedId);
+      item.hasWorkLog = true;
+      renderApp();
+    });
+  }
+  const promoteBtn = document.getElementById('promote-btn');
+  if (promoteBtn) {
+    promoteBtn.addEventListener('click', () => {
+      const item = items.find(i => i.id === selectedId);
+      item.kind = "task";
+      item.subtype = "已升級任務";
+      item.status = "待處理";
+      renderApp();
+    });
+  }
+}
+
+/* ---------------- Variant D: kanban + detail panel, person switch + monthly stats ---------------- */
+let filterD = "全部";
+const BOARD_COLUMNS_D = ["待處理", "進行中", "暫停"];
+
+function renderVariantD() {
+  const scoped = personScopedItems(personFilterD);
+  const stats = monthlyStats(scoped);
+
+  const typed = scoped.filter(i => {
+    if (filterD === "全部") return true;
+    if (filterD === "任務") return i.kind === "task";
+    if (filterD === "提醒") return i.kind === "reminder" && i.subtype !== "雜事";
+    if (filterD === "雜事") return i.subtype === "雜事";
+  });
+
+  const active = typed.filter(i => !(statusColumn(i) === "完成"));
+  const recentlyDone = typed.filter(i => statusColumn(i) === "完成" && i.closedDate === TODAY);
+
+  const peopleChips = PEOPLE.map(p =>
+    `<button class="filter-chip ${p === personFilterD ? 'active' : ''}" data-person="${p}">${p}</button>`
+  ).join("");
+  const typeChips = ["全部", "任務", "提醒", "雜事"].map(f =>
+    `<button class="filter-chip ${f === filterD ? 'active' : ''}" data-filterd="${f}">${f}</button>`
+  ).join("");
+
+  const columns = BOARD_COLUMNS_D.map(col => {
+    const cards = active.filter(i => statusColumn(i) === col).map(item => `
+      <div class="card" draggable="true" data-id="${item.id}">
+        <div class="card-title">${item.title}</div>
+        <div class="card-meta">
+          ${typeBadge(item)}
+          ${personFilterD === "全觀" ? ownerTag(item) : ''}
+          <span class="dot pri-${item.priority}"></span>${item.priority}
+          <span>${fmtDue(item.due)}</span>
+          ${item.spec ? `<span>📎 ${item.spec}</span>` : ''}
+        </div>
+      </div>
+    `).join("");
+    return `
+      <div class="column" data-col="${col}">
+        <h3>${col} <span>${active.filter(i => statusColumn(i) === col).length}</span></h3>
+        ${cards}
+      </div>
+    `;
+  }).join("");
+
+  const recentRows = recentlyDone.map(item => `
+    <div class="item-row" data-id="${item.id}">
+      <span class="dot pri-${item.priority}"></span>
+      <div class="queue-main">
+        <div class="queue-title">${item.title} ${typeBadge(item)} ${personFilterD === "全觀" ? ownerTag(item) : ''}</div>
+        <div class="queue-meta"><span class="status-pill status-${item.status}">${item.status}</span></div>
+      </div>
+    </div>
+  `).join("");
+
+  const selected = items.find(i => i.id === selectedId);
+  const panel = selected ? renderDetailPanel(selected) : `<div class="panel"><div class="empty-panel">點卡片查看詳情、報工或調整狀態。</div></div>`;
+
+  return `
+    <h1>D — 看板＋詳情面板（合併版）</h1>
+    <div class="subtitle">B 的看板分欄＋C 的詳情面板；「完成」不再是常駐欄位，只在今天結案時短暫出現在下方「剛完成」區塊，之後只留在月度工時統計裡。</div>
+
+    <div class="filter-row">${peopleChips}</div>
+    <div style="display:flex;gap:12px;margin-bottom:16px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;">
+        <div style="font-size:11px;color:var(--text-dim);">本月待處理工時（預計）</div>
+        <div style="font-size:20px;font-weight:600;">${stats.pending}h</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 16px;">
+        <div style="font-size:11px;color:var(--text-dim);">本月已投入工時（報工累加）</div>
+        <div style="font-size:20px;font-weight:600;">${stats.done}h</div>
+      </div>
+    </div>
+    <div class="filter-row">${typeChips}</div>
+
+    <div class="layout-c">
+      <div>
+        <div class="board">${columns}</div>
+        ${recentlyDone.length ? `
+          <details class="group" style="margin-top:16px;">
+            <summary>剛完成（今天） <span class="count">${recentlyDone.length}</span></summary>
+            ${recentRows}
+          </details>
+        ` : ''}
+      </div>
+      ${panel}
+    </div>
+  `;
+}
+
+function wireVariantD() {
+  document.querySelectorAll('[data-person]').forEach(btn => {
+    btn.addEventListener('click', () => { personFilterD = btn.dataset.person; renderApp(); });
+  });
+  document.querySelectorAll('[data-filterd]').forEach(btn => {
+    btn.addEventListener('click', () => { filterD = btn.dataset.filterd; renderApp(); });
+  });
+  document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('dragstart', () => { dragSrcId = Number(card.dataset.id); card.classList.add('dragging'); });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('click', () => { selectedId = Number(card.dataset.id); renderApp(); });
+  });
+  document.querySelectorAll('.item-row').forEach(row => {
+    row.addEventListener('click', () => { selectedId = Number(row.dataset.id); renderApp(); });
+  });
+  document.querySelectorAll('.column').forEach(col => {
+    col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); });
+    col.addEventListener('dragleave', () => col.classList.remove('dragover'));
+    col.addEventListener('drop', () => {
+      col.classList.remove('dragover');
+      const item = items.find(i => i.id === dragSrcId);
+      if (!item) return;
+      markStatus(item, col.dataset.col);
+      renderApp();
+    });
+  });
+  const statusSelect = document.getElementById('status-select');
+  if (statusSelect) {
+    statusSelect.addEventListener('change', () => {
+      const item = items.find(i => i.id === selectedId);
+      markStatus(item, statusSelect.value);
+      renderApp();
+    });
+  }
+  const wlSubmit = document.getElementById('wl-submit');
+  if (wlSubmit) {
+    wlSubmit.addEventListener('click', () => {
+      const date = document.getElementById('wl-date').value;
+      const hours = document.getElementById('wl-hours').value;
+      const note = document.getElementById('wl-note').value;
+      if (!hours) return;
+      workLogs[selectedId] = workLogs[selectedId] || [];
+      workLogs[selectedId].push({ date, hours, note });
+      const item = items.find(i => i.id === selectedId);
+      item.hasWorkLog = true;
+      renderApp();
+    });
+  }
+  const promoteBtn = document.getElementById('promote-btn');
+  if (promoteBtn) {
+    promoteBtn.addEventListener('click', () => {
+      const item = items.find(i => i.id === selectedId);
+      item.kind = "task";
+      item.subtype = "已升級任務";
+      item.status = "待處理";
+      renderApp();
+    });
+  }
+}
+
+/* ---------------- switcher + router ---------------- */
+const VARIANTS = {
+  A: { render: renderVariantA, wire: wireVariantA, name: "排序佇列" },
+  B: { render: renderVariantB, wire: wireVariantB, name: "看板分欄" },
+  C: { render: renderVariantC, wire: wireVariantC, name: "分組+詳情面板" },
+  D: { render: renderVariantD, wire: wireVariantD, name: "看板+詳情面板（合併版）" },
+};
+const ORDER = ["A", "B", "C", "D"];
+
+function currentVariant() {
+  const params = new URLSearchParams(location.search);
+  const v = params.get("variant");
+  return VARIANTS[v] ? v : "A";
+}
+
+function setVariant(v) {
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set("variant", v);
+    history.replaceState(null, "", url);
+  } catch (e) { /* file:// may restrict history API in some browsers — ignore */ }
+  renderApp();
+}
+
+function renderApp() {
+  const v = currentVariant();
+  document.getElementById('app').innerHTML = VARIANTS[v].render();
+  VARIANTS[v].wire();
+  renderSwitcher(v);
+}
+
+function renderSwitcher(v) {
+  let bar = document.getElementById('proto-switcher');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'proto-switcher';
+    bar.className = 'switcher';
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML = `
+    <button id="proto-prev">←</button>
+    <span class="label">${v} — ${VARIANTS[v].name}</span>
+    <button id="proto-next">→</button>
+  `;
+  document.getElementById('proto-prev').addEventListener('click', () => {
+    const i = ORDER.indexOf(v);
+    setVariant(ORDER[(i - 1 + ORDER.length) % ORDER.length]);
+  });
+  document.getElementById('proto-next').addEventListener('click', () => {
+    const i = ORDER.indexOf(v);
+    setVariant(ORDER[(i + 1) % ORDER.length]);
+  });
+}
+
+document.addEventListener('keydown', (e) => {
+  const tag = document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) return;
+  const v = currentVariant();
+  const i = ORDER.indexOf(v);
+  if (e.key === 'ArrowLeft') setVariant(ORDER[(i - 1 + ORDER.length) % ORDER.length]);
+  if (e.key === 'ArrowRight') setVariant(ORDER[(i + 1) % ORDER.length]);
+});
+
+renderApp();
+</script>
+</body>
+</html>
