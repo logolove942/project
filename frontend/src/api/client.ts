@@ -1,4 +1,13 @@
-import type { Reminder, Task, TodoItem, WorkLogEntry } from "../types";
+import type {
+  Reminder,
+  Requirement,
+  RequirementWithSpecs,
+  Spec,
+  Task,
+  TaskAssignee,
+  TodoItem,
+  WorkLogEntry,
+} from "../types";
 
 async function readJsonOrThrow(res: Response, action: string): Promise<unknown> {
   if (!res.ok) {
@@ -118,4 +127,62 @@ export async function logReminderWork(
     body: JSON.stringify(entry),
   });
   return (await readJsonOrThrow(res, "新增報工")) as WorkLogEntry;
+}
+
+export async function fetchRequirements(baseUrl: string): Promise<RequirementWithSpecs[]> {
+  const res = await fetch(`${baseUrl}/requirements`);
+  return (await readJsonOrThrow(res, "載入需求清單")) as RequirementWithSpecs[];
+}
+
+export async function createRequirement(baseUrl: string, title: string): Promise<Requirement> {
+  const res = await fetch(`${baseUrl}/requirements`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  return (await readJsonOrThrow(res, "新增需求")) as Requirement;
+}
+
+export async function createSpec(baseUrl: string, requirementId: string, title: string): Promise<Spec> {
+  const res = await fetch(`${baseUrl}/requirements/${requirementId}/specs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  return (await readJsonOrThrow(res, "新增規格")) as Spec;
+}
+
+export interface NewTaskInput {
+  type: "開發任務" | "測試任務";
+  title: string;
+  assignees: TaskAssignee[];
+  priority?: "高" | "中" | "低";
+  dueDate?: string;
+}
+
+export async function createTask(baseUrl: string, specId: string, input: NewTaskInput): Promise<Task> {
+  const res = await fetch(`${baseUrl}/specs/${specId}/tasks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await readJsonOrThrow(res, "新增任務")) as Task;
+}
+
+export interface NewReminderInput {
+  createdBy: string;
+  assignedTo: string;
+  title: string;
+  specId?: string;
+  priority?: "高" | "中" | "低";
+  dueDate?: string;
+}
+
+export async function createReminder(baseUrl: string, input: NewReminderInput): Promise<Reminder> {
+  const res = await fetch(`${baseUrl}/reminders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await readJsonOrThrow(res, "新增提醒")) as Reminder;
 }

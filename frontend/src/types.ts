@@ -18,6 +18,19 @@ export interface TodoItem {
   isChore: boolean;
 }
 
+export interface Requirement {
+  id: string;
+  title: string;
+  status: TaskStatus;
+}
+
+export interface Spec {
+  id: string;
+  requirementId: string;
+  title: string;
+  status: TaskStatus;
+}
+
 export interface TaskAssignee {
   person: string;
   estimatedHours?: number;
@@ -34,6 +47,14 @@ export interface Task {
   priority: Priority;
   dueDate?: string;
   closedDate?: string;
+}
+
+export interface SpecWithTasks extends Spec {
+  tasks: Task[];
+}
+
+export interface RequirementWithSpecs extends Requirement {
+  specs: SpecWithTasks[];
 }
 
 export interface Reminder {

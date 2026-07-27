@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import {
   completeTask,
   fetchMonthlyStats,
+  fetchRequirements,
   fetchScopedTodoList,
   pauseTask,
   resumeTask,
@@ -12,6 +13,8 @@ import {
 import { currentMonth, today } from "../dateUtils";
 import type { TodoItem } from "../types";
 import DetailPanel from "./DetailPanel.vue";
+import QuickAddReminder from "./QuickAddReminder.vue";
+import QuickAddTask from "./QuickAddTask.vue";
 
 const props = defineProps<{ apiBaseUrl: string }>();
 
@@ -83,6 +86,21 @@ const hasLoadedOnce = ref(false);
 const monthlyStats = ref<MonthlyStats | null>(null);
 const statsError = ref<string | null>(null);
 
+// 新增任務/提醒表單用的規格下拉選單資料——只需要 id/顯示文字，
+// 用需求標題＋規格標題組合，避免只顯示規格 id 讓人看不懂選的是哪一份。
+const specOptions = ref<{ id: string; label: string }[]>([]);
+
+async function loadSpecOptions() {
+  try {
+    const requirements = await fetchRequirements(props.apiBaseUrl);
+    specOptions.value = requirements.flatMap((requirement) =>
+      requirement.specs.map((spec) => ({ id: spec.id, label: `${requirement.title} / ${spec.title}` })),
+    );
+  } catch {
+    // 規格清單載入失敗不影響看板主要功能，新增任務表單會顯示空的下拉選單。
+  }
+}
+
 async function loadStats() {
   try {
     monthlyStats.value = await fetchMonthlyStats(props.apiBaseUrl, scopeParam.value, currentMonth());
@@ -151,6 +169,7 @@ async function onComplete(item: TodoItem) {
 }
 
 onMounted(load);
+onMounted(loadSpecOptions);
 
 defineExpose({ reload: load });
 </script>
@@ -214,6 +233,16 @@ defineExpose({ reload: load });
           {{ filter }}
         </button>
       </div>
+    </div>
+
+    <div class="quick-add-bar">
+      <QuickAddReminder
+        :api-base-url="apiBaseUrl"
+        :viewer-name="viewerName"
+        :specs="specOptions"
+        @created="load"
+      />
+      <QuickAddTask :api-base-url="apiBaseUrl" :specs="specOptions" @created="load" />
     </div>
 
     <div v-if="monthlyStats" class="monthly-stats" data-testid="monthly-stats">
@@ -405,6 +434,13 @@ defineExpose({ reload: load });
   display: flex;
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.quick-add-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  align-items: flex-start;
 }
 
 .stat-tile {
