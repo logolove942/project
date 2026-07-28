@@ -21,6 +21,7 @@ export interface TodoItem {
 export interface Requirement {
   id: string;
   title: string;
+  description: string;
   status: TaskStatus;
 }
 
@@ -28,6 +29,7 @@ export interface Spec {
   id: string;
   requirementId: string;
   title: string;
+  description: string;
   status: TaskStatus;
 }
 

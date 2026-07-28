@@ -104,7 +104,7 @@ export function createApp(
   });
 
   app.post("/requirements", requireManagement, (req, res) => {
-    res.status(201).json(service.createRequirement(req.body.title));
+    res.status(201).json(service.createRequirement(req.body.title, req.body.description ?? ""));
   });
 
   app.get("/requirements/:id", (req, res) => {
@@ -115,12 +115,23 @@ export function createApp(
     res.json(service.setRequirementStatus(req.params.id, req.body.status));
   });
 
+  // 標題／描述編輯：任何登入帳號皆可（不像建立限管理職，見 CONTEXT 討論）。
+  app.patch("/requirements/:id", (req, res) => {
+    const { title, description } = req.body;
+    res.json(service.updateRequirement(req.params.id, { title, description }));
+  });
+
   app.post("/requirements/:id/specs", requireManagement, (req, res) => {
-    res.status(201).json(service.createSpec(String(req.params.id), req.body.title));
+    res.status(201).json(service.createSpec(String(req.params.id), req.body.title, req.body.description ?? ""));
   });
 
   app.patch("/specs/:id/status", (req, res) => {
     res.json(service.setSpecStatus(req.params.id, req.body.status));
+  });
+
+  app.patch("/specs/:id", (req, res) => {
+    const { title, description } = req.body;
+    res.json(service.updateSpec(req.params.id, { title, description }));
   });
 
   app.post("/specs/:id/tasks", requireManagement, (req, res) => {

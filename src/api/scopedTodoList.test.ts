@@ -13,8 +13,8 @@ describe("API - 身分範圍與可見性查詢 endpoint（我/同仁/全觀）",
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
     fetch = createAuthedFetch(await registerAndLogin(baseUrl));

@@ -18,7 +18,7 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("需求A");
+    const requirement = service.createRequirement("需求A", "測試描述");
     requirementId = requirement.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
     currentAccount = await loginForTest(baseUrl); // 第一個註冊的帳號 -> 管理職，看得到新增動作
@@ -42,10 +42,25 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
 
     await wrapper!.find(`[data-testid="new-spec-btn-${requirementId}"]`).trigger("click");
     await wrapper!.find('[data-testid="new-spec-title"]').setValue("規格A-1");
+    await wrapper!.find('[data-testid="new-spec-description"]').setValue("規格內容說明");
     await wrapper!.find('[data-testid="new-spec-form"]').trigger("submit");
 
     await waitFor(() => wrapper!.text().includes("規格A-1"));
-    expect(service.getRequirement(requirementId).specs.some((s) => s.title === "規格A-1")).toBe(true);
+    const created = service.getRequirement(requirementId).specs.find((s) => s.title === "規格A-1");
+    expect(created?.description).toBe("規格內容說明");
+  });
+
+  it("shows a status badge on a spec that isn't 完成, and hides it (with a checkmark instead) once it is", async () => {
+    const spec = service.createSpec(requirementId, "規格A-1", "測試描述");
+    await mountAndWait();
+    await waitFor(() => wrapper!.find(`[data-testid="spec-${spec.id}"]`).exists());
+
+    expect(wrapper!.find(`[data-testid="spec-status-${spec.id}"]`).text()).toBe("待處理");
+
+    service.setSpecStatus(spec.id, "完成");
+    await (wrapper!.vm as unknown as { reload: () => Promise<void> }).reload();
+    await waitFor(() => !wrapper!.find(`[data-testid="spec-status-${spec.id}"]`).exists());
+    expect(wrapper!.find(`[data-testid="spec-title-${spec.id}"]`).text()).toContain("✓");
   });
 
   it("shows an inline error when submitting a spec without a title", async () => {
@@ -59,7 +74,7 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
   });
 
   it("creates a task directly under an existing spec, pre-selected, with no spec picker needed", async () => {
-    const spec = service.createSpec(requirementId, "規格A-1");
+    const spec = service.createSpec(requirementId, "規格A-1", "測試描述");
     await registerAccountForTest(baseUrl, "阿凱"); // issue #50：指派對象下拉需要真的存在的帳號
     await mountAndWait();
     await waitFor(() => wrapper!.find(`[data-testid="spec-${spec.id}"]`).exists());

@@ -22,8 +22,8 @@ describe("KanbanBoard - 「剛完成（今天）」收合區塊", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-07-27T10:00:00Z"));
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
     currentAccount = await loginForTest(baseUrl);

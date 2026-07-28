@@ -15,6 +15,7 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS requirements (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL
 );
 
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS specs (
   id TEXT PRIMARY KEY,
   requirement_id TEXT NOT NULL,
   title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL
 );
 
@@ -110,9 +112,20 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 `;
 
+// 幫既有的 db 檔案（CREATE TABLE IF NOT EXISTS 不會幫已存在的資料表補欄位）補上後來才加的欄位；
+// 新資料庫從 SCHEMA 建表時就已經有這個欄位，這裡會是no-op。
+function addColumnIfMissing(db: DatabaseSync, table: string, column: string, definition: string): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as unknown as { name: string }[];
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+}
+
 export function createDatabase(path: string = ":memory:"): DatabaseSync {
   const db = new DatabaseSync(path);
   db.exec(SCHEMA);
+  addColumnIfMissing(db, "requirements", "description", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "specs", "description", "TEXT NOT NULL DEFAULT ''");
   return db;
 }
 

@@ -10,9 +10,13 @@ export type Priority = "高" | "中" | "低";
 // 規格、需求的狀態則由管理職手動設定，系統不驗證、不與底下任務連動。
 export type LifecycleStatus = "待處理" | "進行中" | "暫停" | "完成";
 
+// description 是必填的 Markdown 純文字（見 docs/adr 討論）：描述需求/規格在做什麼，
+// 可能包含連結、圖片（`[文字](網址)`、`![說明](網址)`）；渲染由前端 markdown.ts 自己刻，
+// 不引入外部套件（ADR-0003）。
 export interface Requirement {
   id: string;
   title: string;
+  description: string;
   status: LifecycleStatus;
 }
 
@@ -20,6 +24,7 @@ export interface Spec {
   id: string;
   requirementId: string;
   title: string;
+  description: string;
   status: LifecycleStatus;
 }
 

@@ -22,25 +22,84 @@ describe("API - 需求/規格/任務建立與階層查詢 endpoints", () => {
     const res = await fetch(`${baseUrl}/requirements`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "會員登入" }),
+      body: JSON.stringify({ title: "會員登入", description: "描述內容" }),
     });
     expect(res.status).toBe(201);
     const body = await readJson(res);
     expect(body.title).toBe("會員登入");
+    expect(body.description).toBe("描述內容");
     expect(body.status).toBe("待處理");
   });
 
+  it("defaults a requirement's description to an empty string when omitted", async () => {
+    const res = await fetch(`${baseUrl}/requirements`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "沒填描述" }),
+    });
+    const body = await readJson(res);
+    expect(body.description).toBe("");
+  });
+
   it("creates a spec under a requirement over HTTP", async () => {
-    const requirement = service.createRequirement("會員登入");
+    const requirement = service.createRequirement("會員登入", "測試描述");
 
     const res = await fetch(`${baseUrl}/requirements/${requirement.id}/specs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "會員登入規格" }),
+      body: JSON.stringify({ title: "會員登入規格", description: "規格描述" }),
     });
     expect(res.status).toBe(201);
     const body = await readJson(res);
     expect(body.requirementId).toBe(requirement.id);
+    expect(body.description).toBe("規格描述");
+  });
+
+  it("edits a requirement's title and description over HTTP", async () => {
+    const requirement = service.createRequirement("舊標題", "舊描述");
+
+    const res = await fetch(`${baseUrl}/requirements/${requirement.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "新標題", description: "新描述" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.title).toBe("新標題");
+    expect(body.description).toBe("新描述");
+  });
+
+  it("404s when editing a non-existent requirement", async () => {
+    const res = await fetch(`${baseUrl}/requirements/missing-id`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "x" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("edits a spec's title and description over HTTP", async () => {
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "舊標題", "舊描述");
+
+    const res = await fetch(`${baseUrl}/specs/${spec.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "新標題", description: "新描述" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.title).toBe("新標題");
+    expect(body.description).toBe("新描述");
+  });
+
+  it("404s when editing a non-existent spec", async () => {
+    const res = await fetch(`${baseUrl}/specs/missing-id`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "x" }),
+    });
+    expect(res.status).toBe(404);
   });
 
   it("404s when creating a spec under a non-existent requirement", async () => {
@@ -53,8 +112,8 @@ describe("API - 需求/規格/任務建立與階層查詢 endpoints", () => {
   });
 
   it("creates a task with multiple assignees under a spec over HTTP", async () => {
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
 
     const res = await fetch(`${baseUrl}/specs/${spec.id}/tasks`, {
       method: "POST",
@@ -72,8 +131,8 @@ describe("API - 需求/規格/任務建立與階層查詢 endpoints", () => {
   });
 
   it("400s when creating a task with no assignees", async () => {
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
 
     const res = await fetch(`${baseUrl}/specs/${spec.id}/tasks`, {
       method: "POST",
@@ -93,8 +152,8 @@ describe("API - 需求/規格/任務建立與階層查詢 endpoints", () => {
   });
 
   it("lists all requirements over HTTP", async () => {
-    service.createRequirement("需求一");
-    service.createRequirement("需求二");
+    service.createRequirement("需求一", "測試描述");
+    service.createRequirement("需求二", "測試描述");
 
     const res = await fetch(`${baseUrl}/requirements`);
     expect(res.status).toBe(200);
@@ -103,8 +162,8 @@ describe("API - 需求/規格/任務建立與階層查詢 endpoints", () => {
   });
 
   it("gets a single requirement's full hierarchy over HTTP", async () => {
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
     service.createTask(spec.id, {
       type: "開發任務",
       title: "開發",
@@ -124,8 +183,8 @@ describe("API - 需求/規格/任務建立與階層查詢 endpoints", () => {
   });
 
   it("sets a spec's status manually, without validating against its tasks", async () => {
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
     service.createTask(spec.id, {
       type: "開發任務",
       title: "開發",
@@ -156,7 +215,7 @@ describe("API - 需求/規格/任務建立與階層查詢 endpoints", () => {
   });
 
   it("sets a requirement's status manually over HTTP", async () => {
-    const requirement = service.createRequirement("會員登入");
+    const requirement = service.createRequirement("會員登入", "測試描述");
 
     const res = await fetch(`${baseUrl}/requirements/${requirement.id}/status`, {
       method: "PATCH",

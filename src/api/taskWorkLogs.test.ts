@@ -13,8 +13,8 @@ describe("API - 任務報工 endpoints（含預計 vs 消耗）", () => {
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("金流串接");
-    const spec = service.createSpec(requirement.id, "金流串接規格");
+    const requirement = service.createRequirement("金流串接", "測試描述");
+    const spec = service.createSpec(requirement.id, "金流串接規格", "測試描述");
     const task = service.createTask(spec.id, {
       type: "開發任務",
       title: "開發",

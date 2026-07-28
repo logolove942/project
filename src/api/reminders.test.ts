@@ -13,8 +13,8 @@ describe("API - 提醒建立、關閉、報工 endpoints（含規格掛勾）", 
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
     fetch = createAuthedFetch(await registerAndLogin(baseUrl));

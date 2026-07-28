@@ -1,7 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { createRequirement, createSpec, fetchAccounts, fetchRequirements } from "../api/client";
-import type { Account, RequirementWithSpecs } from "../types";
+import {
+  createRequirement,
+  createSpec,
+  fetchAccounts,
+  fetchRequirements,
+  setRequirementStatus,
+  setSpecStatus,
+  updateRequirement,
+  updateSpec,
+} from "../api/client";
+import type { Account, RequirementWithSpecs, Spec } from "../types";
+import EntityDetailModal from "./EntityDetailModal.vue";
 import Modal from "./Modal.vue";
 import QuickAddTask from "./QuickAddTask.vue";
 
@@ -37,8 +47,10 @@ async function load() {
 }
 
 // 新增需求：彈窗表單（issue：新增動作改用彈窗，操作比行內展開表單更明確）。
+// 描述改為必填（見 CONTEXT 討論：只有標題看不出需求在做什麼）。
 const showNewRequirement = ref(false);
 const newTitle = ref("");
+const newDescription = ref("");
 const submitting = ref(false);
 const submitError = ref<string | null>(null);
 
@@ -49,6 +61,7 @@ function openNewRequirement() {
 function closeNewRequirement() {
   showNewRequirement.value = false;
   newTitle.value = "";
+  newDescription.value = "";
   submitError.value = null;
 }
 
@@ -58,9 +71,13 @@ async function submitNewRequirement() {
     submitError.value = "請填寫標題";
     return;
   }
+  if (!newDescription.value) {
+    submitError.value = "請填寫描述";
+    return;
+  }
   submitting.value = true;
   try {
-    await createRequirement(props.apiBaseUrl, newTitle.value);
+    await createRequirement(props.apiBaseUrl, newTitle.value, newDescription.value);
     closeNewRequirement();
     await load();
   } catch (e) {
@@ -73,12 +90,14 @@ async function submitNewRequirement() {
 // 新增規格：彈窗會自動帶入是在哪個需求底下開的（情境預選），不用再選一次需求。
 const newSpecRequirementId = ref<string | null>(null);
 const newSpecTitle = ref("");
+const newSpecDescription = ref("");
 const newSpecSubmitting = ref(false);
 const newSpecError = ref<string | null>(null);
 
 function openNewSpec(requirementId: string) {
   newSpecRequirementId.value = requirementId;
   newSpecTitle.value = "";
+  newSpecDescription.value = "";
   newSpecError.value = null;
 }
 
@@ -93,15 +112,71 @@ async function submitNewSpec() {
     newSpecError.value = "請填寫標題";
     return;
   }
+  if (!newSpecDescription.value) {
+    newSpecError.value = "請填寫描述";
+    return;
+  }
   newSpecSubmitting.value = true;
   try {
-    await createSpec(props.apiBaseUrl, newSpecRequirementId.value, newSpecTitle.value);
+    await createSpec(props.apiBaseUrl, newSpecRequirementId.value, newSpecTitle.value, newSpecDescription.value);
     closeNewSpec();
     await load();
   } catch (e) {
     newSpecError.value = e instanceof Error ? e.message : "新增規格失敗";
   } finally {
     newSpecSubmitting.value = false;
+  }
+}
+
+// 完成的需求收合進獨立區塊，永久可查（不像看板任務只留當天，見 CONTEXT 討論）；
+// 規格完成與否只用狀態標籤呈現，不額外收合（規格本來就是巢狀的次要層級）。
+const activeRequirements = computed(() => requirements.value.filter((r) => r.status !== "完成"));
+const completedRequirements = computed(() => requirements.value.filter((r) => r.status === "完成"));
+const showCompleted = ref(false);
+
+// 需求/規格詳情彈窗：點標題檢視完整描述（Markdown 渲染），並可在裡面編輯。
+const detailTarget = ref<{ kind: "requirement" | "spec"; id: string } | null>(null);
+const detailModalRef = ref<InstanceType<typeof EntityDetailModal>>();
+
+function openRequirementDetail(requirementId: string) {
+  detailTarget.value = { kind: "requirement", id: requirementId };
+}
+
+function openSpecDetail(specId: string) {
+  detailTarget.value = { kind: "spec", id: specId };
+}
+
+const detailEntity = computed(() => {
+  if (!detailTarget.value) return null;
+  if (detailTarget.value.kind === "requirement") {
+    return requirements.value.find((r) => r.id === detailTarget.value!.id) ?? null;
+  }
+  for (const requirement of requirements.value) {
+    const spec: Spec | undefined = requirement.specs.find((s) => s.id === detailTarget.value!.id);
+    if (spec) return spec;
+  }
+  return null;
+});
+
+async function saveDetail(payload: { title: string; description: string; status: RequirementWithSpecs["status"] }) {
+  if (!detailTarget.value) return;
+  const { title, description, status } = payload;
+  try {
+    if (detailTarget.value.kind === "requirement") {
+      await updateRequirement(props.apiBaseUrl, detailTarget.value.id, { title, description });
+      if (status !== detailEntity.value?.status) {
+        await setRequirementStatus(props.apiBaseUrl, detailTarget.value.id, status);
+      }
+    } else {
+      await updateSpec(props.apiBaseUrl, detailTarget.value.id, { title, description });
+      if (status !== detailEntity.value?.status) {
+        await setSpecStatus(props.apiBaseUrl, detailTarget.value.id, status);
+      }
+    }
+    await load();
+    detailModalRef.value?.stopEditing();
+  } catch (e) {
+    detailModalRef.value?.reportSaveError(e instanceof Error ? e.message : "儲存失敗");
   }
 }
 
@@ -135,6 +210,15 @@ defineExpose({ reload: load });
           標題
           <input v-model="newTitle" type="text" placeholder="新需求標題" data-testid="new-requirement-title" />
         </label>
+        <label class="field">
+          描述（支援 Markdown：**粗體**、[文字](網址)、![說明](網址)）
+          <textarea
+            v-model="newDescription"
+            rows="5"
+            placeholder="這個需求要做成什麼樣子？"
+            data-testid="new-requirement-description"
+          ></textarea>
+        </label>
         <p v-if="submitError" class="form-error" data-testid="new-requirement-error">{{ submitError }}</p>
         <div class="form-actions">
           <button type="button" class="btn-ghost" @click="closeNewRequirement">取消</button>
@@ -151,6 +235,15 @@ defineExpose({ reload: load });
           標題
           <input v-model="newSpecTitle" type="text" placeholder="新規格標題" data-testid="new-spec-title" />
         </label>
+        <label class="field">
+          描述（支援 Markdown：**粗體**、[文字](網址)、![說明](網址)）
+          <textarea
+            v-model="newSpecDescription"
+            rows="5"
+            placeholder="這個規格的內容、位置、原型連結……"
+            data-testid="new-spec-description"
+          ></textarea>
+        </label>
         <p v-if="newSpecError" class="form-error" data-testid="new-spec-error">{{ newSpecError }}</p>
         <div class="form-actions">
           <button type="button" class="btn-ghost" data-testid="new-spec-cancel" @click="closeNewSpec">取消</button>
@@ -161,43 +254,122 @@ defineExpose({ reload: load });
       </form>
     </Modal>
 
+    <EntityDetailModal
+      v-if="detailEntity && detailTarget"
+      ref="detailModalRef"
+      :modal-title="detailTarget.kind === 'requirement' ? '需求詳情' : '規格詳情'"
+      :title="detailEntity.title"
+      :description="detailEntity.description"
+      :status="detailEntity.status"
+      @close="detailTarget = null"
+      @save="saveDetail"
+    />
+
     <p v-if="loading" data-testid="requirements-loading">載入中…</p>
     <p v-else-if="error" data-testid="requirements-error">{{ error }}</p>
-    <ul v-else class="requirement-list" data-testid="requirement-list">
-      <li
-        v-for="requirement in requirements"
-        :key="requirement.id"
-        class="requirement-row"
-        :data-testid="`requirement-${requirement.id}`"
-      >
-        <div class="requirement-title">{{ requirement.title }}</div>
-        <ul v-if="requirement.specs.length" class="spec-list">
-          <li v-for="spec in requirement.specs" :key="spec.id" :data-testid="`spec-${spec.id}`">
-            <div class="spec-row">
-              <span>{{ spec.title }}</span>
-              <QuickAddTask
-                v-if="isAdmin"
-                :api-base-url="apiBaseUrl"
-                :specs="[{ id: spec.id, label: spec.title }]"
-                :accounts="accountOptions"
-                :initial-spec-id="spec.id"
-                @created="onTaskCreated"
-              />
-            </div>
+    <template v-else>
+      <ul class="requirement-list" data-testid="requirement-list">
+        <li
+          v-for="requirement in activeRequirements"
+          :key="requirement.id"
+          class="requirement-row"
+          :data-testid="`requirement-${requirement.id}`"
+        >
+          <button
+            type="button"
+            class="requirement-title"
+            :data-testid="`requirement-title-${requirement.id}`"
+            @click="openRequirementDetail(requirement.id)"
+          >
+            {{ requirement.title }}
+          </button>
+          <ul v-if="requirement.specs.length" class="spec-list">
+            <li v-for="spec in requirement.specs" :key="spec.id" :data-testid="`spec-${spec.id}`">
+              <div class="spec-row">
+                <button
+                  type="button"
+                  class="spec-title"
+                  :class="{ 'spec-done': spec.status === '完成' }"
+                  :data-testid="`spec-title-${spec.id}`"
+                  @click="openSpecDetail(spec.id)"
+                >
+                  <span v-if="spec.status === '完成'" class="spec-check">✓</span>
+                  {{ spec.title }}
+                </button>
+                <span
+                  v-if="spec.status !== '完成'"
+                  class="spec-status-badge"
+                  :data-testid="`spec-status-${spec.id}`"
+                  >{{ spec.status }}</span
+                >
+                <QuickAddTask
+                  v-if="isAdmin"
+                  :api-base-url="apiBaseUrl"
+                  :specs="[{ id: spec.id, label: spec.title }]"
+                  :accounts="accountOptions"
+                  :initial-spec-id="spec.id"
+                  @created="onTaskCreated"
+                />
+              </div>
+            </li>
+          </ul>
+
+          <button
+            v-if="isAdmin"
+            type="button"
+            class="add-inline-btn"
+            :data-testid="`new-spec-btn-${requirement.id}`"
+            @click="openNewSpec(requirement.id)"
+          >
+            + 新增規格
+          </button>
+        </li>
+      </ul>
+
+      <div v-if="completedRequirements.length" class="completed-section">
+        <button
+          type="button"
+          class="completed-toggle"
+          data-testid="completed-requirements-toggle"
+          @click="showCompleted = !showCompleted"
+        >
+          {{ showCompleted ? "▾" : "▸" }} 已完成需求（{{ completedRequirements.length }}）
+        </button>
+        <ul v-if="showCompleted" class="requirement-list" data-testid="completed-requirement-list">
+          <li
+            v-for="requirement in completedRequirements"
+            :key="requirement.id"
+            class="requirement-row requirement-row-done"
+            :data-testid="`requirement-${requirement.id}`"
+          >
+            <button
+              type="button"
+              class="requirement-title"
+              :data-testid="`requirement-title-${requirement.id}`"
+              @click="openRequirementDetail(requirement.id)"
+            >
+              {{ requirement.title }}
+            </button>
+            <ul v-if="requirement.specs.length" class="spec-list">
+              <li v-for="spec in requirement.specs" :key="spec.id" :data-testid="`spec-${spec.id}`">
+                <div class="spec-row">
+                  <button
+                    type="button"
+                    class="spec-title"
+                    :class="{ 'spec-done': spec.status === '完成' }"
+                    :data-testid="`spec-title-${spec.id}`"
+                    @click="openSpecDetail(spec.id)"
+                  >
+                    <span v-if="spec.status === '完成'" class="spec-check">✓</span>
+                    {{ spec.title }}
+                  </button>
+                </div>
+              </li>
+            </ul>
           </li>
         </ul>
-
-        <button
-          v-if="isAdmin"
-          type="button"
-          class="add-inline-btn"
-          :data-testid="`new-spec-btn-${requirement.id}`"
-          @click="openNewSpec(requirement.id)"
-        >
-          + 新增規格
-        </button>
-      </li>
-    </ul>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -268,7 +440,8 @@ defineExpose({ reload: load });
   margin-bottom: 14px;
 }
 
-.field input {
+.field input,
+.field textarea {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 8px 11px;
@@ -276,9 +449,12 @@ defineExpose({ reload: load });
   background: var(--bg);
   color: var(--text);
   outline: none;
+  font-family: inherit;
+  resize: vertical;
 }
 
-.field input:focus {
+.field input:focus,
+.field textarea:focus {
   border-color: var(--primary);
   box-shadow: var(--shadow-focus);
 }
@@ -322,6 +498,20 @@ defineExpose({ reload: load });
 .requirement-title {
   font-weight: 700;
   color: var(--text);
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.requirement-title:hover {
+  text-decoration: underline;
+}
+
+.requirement-row-done {
+  opacity: 0.75;
 }
 
 .spec-list {
@@ -340,6 +530,58 @@ defineExpose({ reload: load });
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.spec-title {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.spec-title:hover {
+  text-decoration: underline;
+}
+
+.spec-title.spec-done {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.spec-check {
+  color: var(--success, #16a34a);
+  text-decoration: none;
+  display: inline-block;
+  margin-right: 2px;
+}
+
+.spec-status-badge {
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+}
+
+.completed-section {
+  margin-top: 6px;
+}
+
+.completed-toggle {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 2px;
+}
+
+.completed-toggle:hover {
+  color: var(--text);
 }
 
 .add-inline-btn {

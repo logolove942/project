@@ -14,8 +14,8 @@ describe("API - 提醒升級為任務 endpoint", () => {
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
     specId = spec.id;
     const reminder = service.createReminder({
       createdBy: "小美",

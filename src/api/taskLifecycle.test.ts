@@ -13,8 +13,8 @@ describe("API - 任務狀態機 endpoints（含退件/重工回合）", () => {
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("報表匯出");
-    const spec = service.createSpec(requirement.id, "報表匯出規格");
+    const requirement = service.createRequirement("報表匯出", "測試描述");
+    const spec = service.createSpec(requirement.id, "報表匯出規格", "測試描述");
     const task = service.createTask(spec.id, {
       type: "開發任務",
       title: "開發",

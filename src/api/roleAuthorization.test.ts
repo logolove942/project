@@ -193,6 +193,28 @@ describe("API - 角色授權：管理職專屬操作（issue #47）", () => {
     expect(res.status).toBe(201);
   });
 
+  it("keeps editing a requirement's/spec's title and description open to a 一般同仁 (regression)", async () => {
+    const reqRes = await fetch(
+      `${baseUrl}/requirements/${requirementId}`,
+      authed(memberToken, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: "同仁補充的描述" }),
+      }),
+    );
+    expect(reqRes.status).toBe(200);
+
+    const specRes = await fetch(
+      `${baseUrl}/specs/${specId}`,
+      authed(memberToken, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: "同仁補充的規格描述" }),
+      }),
+    );
+    expect(specRes.status).toBe(200);
+  });
+
   it("keeps promoting a reminder to a task open to a 一般同仁 (regression)", async () => {
     const reminder = await readJson(
       await fetch(

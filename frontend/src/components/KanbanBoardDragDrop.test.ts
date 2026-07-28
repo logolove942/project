@@ -18,8 +18,8 @@ describe("KanbanBoard - 拖曳卡片改狀態", () => {
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
     currentAccount = await loginForTest(baseUrl);

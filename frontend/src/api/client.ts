@@ -197,22 +197,72 @@ export async function fetchRequirements(baseUrl: string): Promise<RequirementWit
   return (await readJsonOrThrow(res, "載入需求清單")) as RequirementWithSpecs[];
 }
 
-export async function createRequirement(baseUrl: string, title: string): Promise<Requirement> {
+export async function createRequirement(baseUrl: string, title: string, description: string): Promise<Requirement> {
   const res = await authedFetch(`${baseUrl}/requirements`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, description }),
   });
   return (await readJsonOrThrow(res, "新增需求")) as Requirement;
 }
 
-export async function createSpec(baseUrl: string, requirementId: string, title: string): Promise<Spec> {
+export async function createSpec(
+  baseUrl: string,
+  requirementId: string,
+  title: string,
+  description: string,
+): Promise<Spec> {
   const res = await authedFetch(`${baseUrl}/requirements/${requirementId}/specs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, description }),
   });
   return (await readJsonOrThrow(res, "新增規格")) as Spec;
+}
+
+export interface EntityEdit {
+  title?: string;
+  description?: string;
+}
+
+export async function setRequirementStatus(
+  baseUrl: string,
+  id: string,
+  status: Requirement["status"],
+): Promise<Requirement> {
+  const res = await authedFetch(`${baseUrl}/requirements/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return (await readJsonOrThrow(res, "更新需求狀態")) as Requirement;
+}
+
+export async function setSpecStatus(baseUrl: string, id: string, status: Spec["status"]): Promise<Spec> {
+  const res = await authedFetch(`${baseUrl}/specs/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return (await readJsonOrThrow(res, "更新規格狀態")) as Spec;
+}
+
+export async function updateRequirement(baseUrl: string, id: string, edit: EntityEdit): Promise<Requirement> {
+  const res = await authedFetch(`${baseUrl}/requirements/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(edit),
+  });
+  return (await readJsonOrThrow(res, "編輯需求")) as Requirement;
+}
+
+export async function updateSpec(baseUrl: string, id: string, edit: EntityEdit): Promise<Spec> {
+  const res = await authedFetch(`${baseUrl}/specs/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(edit),
+  });
+  return (await readJsonOrThrow(res, "編輯規格")) as Spec;
 }
 
 export interface NewTaskInput {

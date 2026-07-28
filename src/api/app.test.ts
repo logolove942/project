@@ -20,7 +20,7 @@ describe("API - Express app (createApp)", () => {
   afterEach(() => closeServer(server));
 
   it("lists requirements over HTTP", async () => {
-    service.createRequirement("需求一");
+    service.createRequirement("需求一", "測試描述");
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
     fetch = createAuthedFetch(await registerAndLogin(baseUrl));
 
@@ -32,8 +32,8 @@ describe("API - Express app (createApp)", () => {
   });
 
   it("gets a single requirement's full hierarchy over HTTP", async () => {
-    const requirement = service.createRequirement("需求一");
-    const spec = service.createSpec(requirement.id, "規格A");
+    const requirement = service.createRequirement("需求一", "測試描述");
+    const spec = service.createSpec(requirement.id, "規格A", "測試描述");
     service.createTask(spec.id, {
       type: "開發任務",
       title: "任務A",
@@ -64,7 +64,7 @@ describe("API - Express app (createApp)", () => {
     fetch = createAuthedFetch(await registerAndLogin(baseUrl));
 
     // 直接對傳進 createApp 的 service 實例寫入，驗證 route 看到的是同一個實例
-    service.createRequirement("在 service 上直接建立");
+    service.createRequirement("在 service 上直接建立", "測試描述");
 
     const res = await fetch(`${baseUrl}/requirements`);
     const body = await readJson(res);

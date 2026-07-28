@@ -16,8 +16,8 @@ describe("KanbanBoard - 身分切換（我/同仁/全觀）＋全觀擁有者標
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
   });

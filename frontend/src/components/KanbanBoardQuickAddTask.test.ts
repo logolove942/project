@@ -18,8 +18,8 @@ describe("KanbanBoard - 快速新增任務（可複選指派）", () => {
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("需求A");
-    const spec = service.createSpec(requirement.id, "規格A");
+    const requirement = service.createRequirement("需求A", "測試描述");
+    const spec = service.createSpec(requirement.id, "規格A", "測試描述");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createExpressApp(service)));
     currentAccount = await loginForTest(baseUrl);

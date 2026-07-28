@@ -25,12 +25,14 @@ const toUndef = <T>(v: T | null): T | undefined => (v === null ? undefined : v);
 interface RequirementRow {
   id: string;
   title: string;
+  description: string;
   status: string;
 }
 interface SpecRow {
   id: string;
   requirement_id: string;
   title: string;
+  description: string;
   status: string;
 }
 interface TaskRow {
@@ -90,7 +92,7 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
   const generateId = (prefix: string) => nextId(db, prefix);
 
   function rowToRequirement(row: RequirementRow): Requirement {
-    return { id: row.id, title: row.title, status: row.status as LifecycleStatus };
+    return { id: row.id, title: row.title, description: row.description, status: row.status as LifecycleStatus };
   }
 
   function rowToSpec(row: SpecRow): Spec {
@@ -98,6 +100,7 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
       id: row.id,
       requirementId: row.requirement_id,
       title: row.title,
+      description: row.description,
       status: row.status as LifecycleStatus,
     };
   }
@@ -215,26 +218,50 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
     return rowToSpec(row);
   }
 
-  function createRequirement(title: string): Requirement {
-    const requirement: Requirement = { id: generateId("req"), title, status: "待處理" };
-    db.prepare("INSERT INTO requirements (id, title, status) VALUES (?, ?, ?)").run(
+  function createRequirement(title: string, description: string): Requirement {
+    const requirement: Requirement = { id: generateId("req"), title, description, status: "待處理" };
+    db.prepare("INSERT INTO requirements (id, title, description, status) VALUES (?, ?, ?, ?)").run(
       requirement.id,
       requirement.title,
+      requirement.description,
       requirement.status,
     );
     return requirement;
   }
 
-  function createSpec(requirementId: string, title: string): Spec {
+  function createSpec(requirementId: string, title: string, description: string): Spec {
     requireRequirement(requirementId);
-    const spec: Spec = { id: generateId("spec"), requirementId, title, status: "待處理" };
-    db.prepare("INSERT INTO specs (id, requirement_id, title, status) VALUES (?, ?, ?, ?)").run(
+    const spec: Spec = { id: generateId("spec"), requirementId, title, description, status: "待處理" };
+    db.prepare("INSERT INTO specs (id, requirement_id, title, description, status) VALUES (?, ?, ?, ?, ?)").run(
       spec.id,
       spec.requirementId,
       spec.title,
+      spec.description,
       spec.status,
     );
     return spec;
+  }
+
+  // 標題／描述建立後可編輯（任何登入帳號皆可，見 app.ts 的 PATCH /requirements/:id、/specs/:id 未加 requireManagement）；
+  // 兩個欄位皆為選填更新，只更新有帶到的欄位。
+  function updateRequirement(requirementId: string, params: { title?: string; description?: string }): Requirement {
+    const current = requireRequirement(requirementId);
+    const title = params.title ?? current.title;
+    const description = params.description ?? current.description;
+    db.prepare("UPDATE requirements SET title = ?, description = ? WHERE id = ?").run(
+      title,
+      description,
+      requirementId,
+    );
+    return requireRequirement(requirementId);
+  }
+
+  function updateSpec(specId: string, params: { title?: string; description?: string }): Spec {
+    const current = requireSpec(specId);
+    const title = params.title ?? current.title;
+    const description = params.description ?? current.description;
+    db.prepare("UPDATE specs SET title = ?, description = ? WHERE id = ?").run(title, description, specId);
+    return requireSpec(specId);
   }
 
   // 規格/需求的狀態由管理職手動設定，系統不驗證、不與底下任務狀態連動。
@@ -720,6 +747,8 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
   return {
     createRequirement,
     createSpec,
+    updateRequirement,
+    updateSpec,
     createTask,
     setSpecStatus,
     setRequirementStatus,

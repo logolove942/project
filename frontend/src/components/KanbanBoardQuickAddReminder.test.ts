@@ -46,8 +46,8 @@ describe("KanbanBoard - 快速新增提醒/雜事", () => {
   });
 
   it("creates a reminder assigned to someone else, linked to a spec", async () => {
-    const requirement = service.createRequirement("需求A");
-    const spec = service.createSpec(requirement.id, "規格A");
+    const requirement = service.createRequirement("需求A", "測試描述");
+    const spec = service.createSpec(requirement.id, "規格A", "測試描述");
     await registerAccountForTest(baseUrl, "阿凱"); // issue #50：對象下拉需要真的存在的帳號
     await mountAndSetViewer("小美");
 

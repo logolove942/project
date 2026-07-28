@@ -15,8 +15,8 @@ describe("API - 活躍清單／今日剛完成 endpoint（ADR-0002）", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-27T10:00:00Z"));
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
     fetch = createAuthedFetch(await registerAndLogin(baseUrl));

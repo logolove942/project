@@ -10,24 +10,56 @@ describe("taskService - 需求/規格/任務 hierarchy", () => {
   });
 
   it("creates a requirement", () => {
-    const requirement = service.createRequirement("會員登入");
+    const requirement = service.createRequirement("會員登入", "測試描述");
     expect(requirement.title).toBe("會員登入");
+    expect(requirement.description).toBe("測試描述");
     expect(requirement.id).toBeTruthy();
   });
 
   it("creates a spec under a requirement", () => {
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "規格描述");
     expect(spec.requirementId).toBe(requirement.id);
+    expect(spec.description).toBe("規格描述");
+  });
+
+  it("updates a requirement's title and description", () => {
+    const requirement = service.createRequirement("舊標題", "舊描述");
+    const updated = service.updateRequirement(requirement.id, { title: "新標題", description: "新描述" });
+    expect(updated.title).toBe("新標題");
+    expect(updated.description).toBe("新描述");
+  });
+
+  it("updates only the field passed to updateRequirement, leaving the other untouched", () => {
+    const requirement = service.createRequirement("標題", "描述");
+    const updated = service.updateRequirement(requirement.id, { description: "只改描述" });
+    expect(updated.title).toBe("標題");
+    expect(updated.description).toBe("只改描述");
+  });
+
+  it("throws when updating a non-existent requirement", () => {
+    expect(() => service.updateRequirement("missing-req", { title: "x" })).toThrowError(NotFoundError);
+  });
+
+  it("updates a spec's title and description", () => {
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "舊標題", "舊描述");
+    const updated = service.updateSpec(spec.id, { title: "新標題", description: "新描述" });
+    expect(updated.title).toBe("新標題");
+    expect(updated.description).toBe("新描述");
+  });
+
+  it("throws when updating a non-existent spec", () => {
+    expect(() => service.updateSpec("missing-spec", { title: "x" })).toThrowError(NotFoundError);
   });
 
   it("throws when creating a spec under a non-existent requirement", () => {
-    expect(() => service.createSpec("missing-req", "x")).toThrowError();
+    expect(() => service.createSpec("missing-req", "x", "測試描述")).toThrowError();
   });
 
   it("creates multiple tasks under a spec, each with a single assignee", () => {
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
     const devTask = service.createTask(spec.id, {
       type: "開發任務",
       title: "開發",
@@ -53,17 +85,17 @@ describe("taskService - 需求/規格/任務 hierarchy", () => {
   });
 
   it("throws when creating a task with no assignees", () => {
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
     expect(() =>
       service.createTask(spec.id, { type: "開發任務", title: "x", assignees: [] }),
     ).toThrowError();
   });
 
   it("queries back the full requirement -> spec -> task hierarchy", () => {
-    const requirement = service.createRequirement("會員登入");
-    const loginSpec = service.createSpec(requirement.id, "會員登入規格");
-    const logoutSpec = service.createSpec(requirement.id, "會員登出規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const loginSpec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
+    const logoutSpec = service.createSpec(requirement.id, "會員登出規格", "測試描述");
     service.createTask(loginSpec.id, {
       type: "開發任務",
       title: "開發登入",
@@ -91,9 +123,9 @@ describe("taskService - 需求/規格/任務 hierarchy", () => {
   });
 
   it("lists all requirements with their nested hierarchy", () => {
-    const r1 = service.createRequirement("需求一");
-    const r2 = service.createRequirement("需求二");
-    service.createSpec(r1.id, "規格A");
+    const r1 = service.createRequirement("需求一", "測試描述");
+    const r2 = service.createRequirement("需求二", "測試描述");
+    service.createSpec(r1.id, "規格A", "測試描述");
 
     const all = service.listRequirements();
 
@@ -109,8 +141,8 @@ describe("taskService - 報工 / 工時記錄", () => {
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
     const task = service.createTask(spec.id, {
       type: "開發任務",
       title: "開發",
@@ -170,8 +202,8 @@ describe("taskService - 任務多人指派與預計工時拆分", () => {
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("金流串接");
-    const spec = service.createSpec(requirement.id, "金流串接規格");
+    const requirement = service.createRequirement("金流串接", "測試描述");
+    const spec = service.createSpec(requirement.id, "金流串接規格", "測試描述");
     specId = spec.id;
     const task = service.createTask(spec.id, {
       type: "開發任務",
@@ -185,8 +217,8 @@ describe("taskService - 任務多人指派與預計工時拆分", () => {
   });
 
   it("assigns a task to multiple people without duplicating the task", () => {
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     const before = service.getSpecWithTasks(spec.id).tasks.length;
     service.createTask(spec.id, {
       type: "開發任務",
@@ -247,8 +279,8 @@ describe("taskService - 任務退件與重工回合", () => {
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("報表匯出");
-    const spec = service.createSpec(requirement.id, "報表匯出規格");
+    const requirement = service.createRequirement("報表匯出", "測試描述");
+    const spec = service.createSpec(requirement.id, "報表匯出規格", "測試描述");
     specId = spec.id;
     const task = service.createTask(spec.id, {
       type: "開發任務",
@@ -326,8 +358,8 @@ describe("taskService - 任務狀態機（待處理/進行中/暫停/完成）",
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("報表匯出");
-    const spec = service.createSpec(requirement.id, "報表匯出規格");
+    const requirement = service.createRequirement("報表匯出", "測試描述");
+    const spec = service.createSpec(requirement.id, "報表匯出規格", "測試描述");
     specId = spec.id;
     const task = service.createTask(spec.id, {
       type: "開發任務",
@@ -397,9 +429,9 @@ describe("taskService - 規格/需求獨立狀態欄位", () => {
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("金流串接");
+    const requirement = service.createRequirement("金流串接", "測試描述");
     requirementId = requirement.id;
-    const spec = service.createSpec(requirement.id, "金流串接規格");
+    const spec = service.createSpec(requirement.id, "金流串接規格", "測試描述");
     specId = spec.id;
   });
 
@@ -444,8 +476,8 @@ describe("taskService - 提醒建立、規格自動掛勾與雜事可見性規�
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
     specId = spec.id;
   });
 
@@ -590,8 +622,8 @@ describe("taskService - 提醒升級為正式任務", () => {
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("會員登入");
-    const spec = service.createSpec(requirement.id, "會員登入規格");
+    const requirement = service.createRequirement("會員登入", "測試描述");
+    const spec = service.createSpec(requirement.id, "會員登入規格", "測試描述");
     specId = spec.id;
     const reminder = service.createReminder({
       createdBy: "小美",
@@ -670,8 +702,8 @@ describe("taskService - 混合排序（優先級＋到期日，含手動覆蓋�
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
   });
 
@@ -868,8 +900,8 @@ describe("taskService - 身分範圍查詢與可見性（我/同仁/全觀）", 
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
   });
 
@@ -975,8 +1007,8 @@ describe("taskService - 完成項目下架看板查詢（ADR-0002）", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-27T10:00:00Z"));
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
   });
 
@@ -1056,8 +1088,8 @@ describe("taskService - 月度與季度/半年工時統計聚合", () => {
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
   });
 
@@ -1188,8 +1220,8 @@ describe("taskService - 錯誤型別化（NotFoundError/ValidationError）", () 
 
   beforeEach(() => {
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
     const task = service.createTask(specId, {
       type: "開發任務",
@@ -1202,7 +1234,7 @@ describe("taskService - 錯誤型別化（NotFoundError/ValidationError）", () 
   });
 
   it("throws NotFoundError for missing requirement/spec/task/reminder lookups", () => {
-    expect(() => service.createSpec("missing", "x")).toThrow(NotFoundError);
+    expect(() => service.createSpec("missing", "x", "測試描述")).toThrow(NotFoundError);
     expect(() => service.getRequirement("missing")).toThrow(NotFoundError);
     expect(() => service.setRequirementStatus("missing", "完成")).toThrow(NotFoundError);
     expect(() => service.getSpecWithTasks("missing")).toThrow(NotFoundError);

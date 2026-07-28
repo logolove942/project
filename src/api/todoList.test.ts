@@ -13,8 +13,8 @@ describe("API - 混合排序待辦清單 endpoint（含手動排序）", () => {
 
   beforeEach(async () => {
     service = createTaskService();
-    const requirement = service.createRequirement("R");
-    const spec = service.createSpec(requirement.id, "S");
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
     specId = spec.id;
     ({ server, baseUrl } = await listenOnEphemeralPort(createApp(service)));
     fetch = createAuthedFetch(await registerAndLogin(baseUrl));
