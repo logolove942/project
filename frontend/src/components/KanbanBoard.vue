@@ -11,6 +11,7 @@ import {
   startTask,
   type MonthlyStats,
 } from "../api/client";
+import { avatarColor, initials } from "../avatarUtils";
 import { currentMonth, today } from "../dateUtils";
 import type { Account, TodoItem } from "../types";
 import DetailPanel from "./DetailPanel.vue";
@@ -288,8 +289,14 @@ defineExpose({ reload: load });
                 <div class="card-title">{{ item.title }}</div>
                 <div class="card-meta">
                   <span class="badge">{{ item.kind === "task" ? "任務" : item.isChore ? "雜事" : "提醒" }}</span>
-                  <span v-if="scopeMode === 'all'" class="owner" :data-testid="`owner-${item.id}`"
-                    >👤 {{ item.owners.join("、") }}</span
+                  <span v-if="scopeMode === 'all'" class="owner" :data-testid="`owner-${item.id}`">
+                    <span
+                      v-for="owner in item.owners"
+                      :key="owner"
+                      class="avatar-mini"
+                      :style="{ background: avatarColor(owner) }"
+                      >{{ initials(owner) }}</span
+                    >{{ item.owners.join("、") }}</span
                   >
                   <span class="priority">{{ item.priority }}</span>
                   <span v-if="item.dueDate">{{ item.dueDate }}</span>
@@ -320,7 +327,15 @@ defineExpose({ reload: load });
               <div class="card-title">{{ item.title }}</div>
               <div class="card-meta">
                 <span class="badge">{{ item.kind === "task" ? "任務" : item.isChore ? "雜事" : "提醒" }}</span>
-                <span v-if="scopeMode === 'all'" class="owner">👤 {{ item.owners.join("、") }}</span>
+                <span v-if="scopeMode === 'all'" class="owner">
+                  <span
+                    v-for="owner in item.owners"
+                    :key="owner"
+                    class="avatar-mini"
+                    :style="{ background: avatarColor(owner) }"
+                    >{{ initials(owner) }}</span
+                  >{{ item.owners.join("、") }}</span
+                >
                 <span>{{ item.status }}</span>
               </div>
             </div>
@@ -497,7 +512,27 @@ defineExpose({ reload: load });
 }
 
 .owner {
-  color: #7038d8;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #4b5563;
+}
+
+.avatar-mini {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-left: -4px;
+}
+
+.avatar-mini:first-child {
+  margin-left: 0;
 }
 
 .card-title {

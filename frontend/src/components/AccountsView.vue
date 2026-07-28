@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { fetchAccounts, promoteAccount } from "../api/client";
+import { avatarColor, initials } from "../avatarUtils";
 import type { Account } from "../types";
 
 const props = defineProps<{ apiBaseUrl: string }>();
@@ -46,8 +47,9 @@ onMounted(load);
     <p v-else-if="error" data-testid="accounts-error">{{ error }}</p>
     <ul v-else class="account-list" data-testid="account-list">
       <li v-for="account in accounts" :key="account.id" :data-testid="`account-${account.id}`">
+        <span class="avatar" :style="{ background: avatarColor(account.name) }">{{ initials(account.name) }}</span>
         <span class="account-name">{{ account.name }}</span>
-        <span class="role-badge">{{ account.role }}</span>
+        <span class="role-badge" :class="{ admin: account.role === '管理職' }">{{ account.role }}</span>
         <button
           v-if="account.role === '一般同仁'"
           type="button"
@@ -90,11 +92,30 @@ onMounted(load);
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #f5f6f8;
+  background: #ffffff;
   border: 1px solid #e2e4e9;
   border-radius: 10px;
-  padding: 8px 14px;
+  padding: 10px 14px;
   margin-bottom: 8px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.account-list li:hover {
+  border-color: #c7ccd6;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
 }
 
 .account-name {
@@ -104,10 +125,18 @@ onMounted(load);
 
 .role-badge {
   font-size: 11px;
+  font-weight: 600;
   border: 1px solid #e2e4e9;
+  background: #f5f6f8;
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 2px 10px;
   color: #6b7280;
+}
+
+.role-badge.admin {
+  border-color: transparent;
+  background: #e6ebff;
+  color: #3b5bfd;
 }
 
 .account-list button {

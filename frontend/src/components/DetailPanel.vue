@@ -14,6 +14,7 @@ import {
   resumeTask,
   startTask,
 } from "../api/client";
+import { avatarColor, initials } from "../avatarUtils";
 import type { Account, Reminder, Task, WorkLogEntry } from "../types";
 
 const props = defineProps<{
@@ -207,6 +208,7 @@ defineExpose({ reload: load });
       <p v-if="!workLogs.length" data-testid="worklog-empty">尚無報工紀錄</p>
       <ul v-else data-testid="worklog-list">
         <li v-for="log in workLogs" :key="log.id" :data-testid="`worklog-${log.id}`">
+          <span class="avatar-mini" :style="{ background: avatarColor(log.person) }">{{ initials(log.person) }}</span>
           {{ log.date }}｜{{ log.person }}｜{{ log.hours }} 小時<span v-if="log.note">｜{{ log.note }}</span>
         </li>
       </ul>
@@ -277,6 +279,22 @@ defineExpose({ reload: load });
 .detail-panel li {
   border-top: 1px solid #e2e4e9;
   padding: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.avatar-mini {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: #ffffff;
+  flex-shrink: 0;
 }
 
 .detail-panel form {

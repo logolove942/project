@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { clearToken, fetchAccounts, getToken, logout as apiLogout, setToken } from "./api/client";
+import { avatarColor, initials } from "./avatarUtils";
 import KanbanBoard from "./components/KanbanBoard.vue";
 import LoginView from "./components/LoginView.vue";
 import RequirementsView from "./components/RequirementsView.vue";
@@ -92,8 +93,16 @@ async function logout() {
         </button>
       </div>
       <div class="identity">
+        <span class="avatar" :style="{ background: avatarColor(currentAccount.name) }">{{
+          initials(currentAccount.name)
+        }}</span>
         <span data-testid="current-account-name">{{ currentAccount.name }}</span>
-        <span class="role-badge" data-testid="current-account-role">{{ currentAccount.role }}</span>
+        <span
+          class="role-badge"
+          :class="{ admin: currentAccount.role === '管理職' }"
+          data-testid="current-account-role"
+          >{{ currentAccount.role }}</span
+        >
         <button type="button" data-testid="logout-btn" @click="logout">登出</button>
       </div>
     </header>
@@ -158,12 +167,33 @@ async function logout() {
   font-size: 13px;
 }
 
+.avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
 .role-badge {
   font-size: 11px;
+  font-weight: 600;
   border: 1px solid #e2e4e9;
+  background: #f5f6f8;
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: 2px 10px;
   color: #6b7280;
+}
+
+.role-badge.admin {
+  border-color: transparent;
+  background: #e6ebff;
+  color: #3b5bfd;
 }
 
 .identity button {
