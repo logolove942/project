@@ -67,19 +67,15 @@ onMounted(load);
 
 <style scoped>
 .accounts-view {
-  padding: 20px;
-  font-family:
-    -apple-system,
-    "Segoe UI",
-    "PingFang TC",
-    "Microsoft JhengHei",
-    sans-serif;
+  padding: 20px 0;
   font-size: 13px;
 }
 
 .accounts-view h2 {
-  font-size: 15px;
-  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 14px;
+  color: var(--text);
 }
 
 .account-list {
@@ -92,22 +88,25 @@ onMounted(load);
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #ffffff;
-  border: 1px solid #e2e4e9;
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   padding: 10px 14px;
   margin-bottom: 8px;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 .account-list li:hover {
-  border-color: #c7ccd6;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
 }
 
 .avatar {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   flex-shrink: 0;
   display: flex;
@@ -121,36 +120,47 @@ onMounted(load);
 .account-name {
   font-weight: 600;
   flex: 1;
+  color: var(--text);
 }
 
 .role-badge {
   font-size: 11px;
-  font-weight: 600;
-  border: 1px solid #e2e4e9;
-  background: #f5f6f8;
-  border-radius: 999px;
+  font-weight: 700;
+  background: var(--slate-tint);
+  border-radius: var(--radius-pill);
   padding: 2px 10px;
-  color: #6b7280;
+  color: var(--slate);
 }
 
 .role-badge.admin {
-  border-color: transparent;
-  background: #e6ebff;
-  color: #3b5bfd;
+  background: var(--primary-tint);
+  color: var(--primary);
 }
 
 .account-list button {
-  border: 1px solid #3b5bfd;
+  border: 1px solid var(--primary);
   background: transparent;
-  color: #3b5bfd;
-  border-radius: 6px;
-  padding: 4px 10px;
+  color: var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.account-list button:hover:not(:disabled) {
+  background: var(--primary);
+  color: #fff;
+}
+
+.account-list button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 [data-testid="promote-account-error"] {
-  color: #b3261e;
+  color: var(--danger);
   font-size: 12px;
 }
 </style>

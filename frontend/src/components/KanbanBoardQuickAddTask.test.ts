@@ -33,7 +33,10 @@ describe("KanbanBoard - 快速新增任務（可複選指派）", () => {
   });
 
   async function mountAndOpenForm() {
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
+    wrapper = mount(KanbanBoard, {
+      props: { apiBaseUrl: baseUrl, currentAccount },
+      global: { stubs: { teleport: true } },
+    });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
     await waitFor(() => wrapper!.find('[data-testid="quick-add-task-btn"]').exists());
     await wrapper!.find('[data-testid="quick-add-task-btn"]').trigger("click");

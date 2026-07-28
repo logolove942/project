@@ -30,7 +30,10 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
   });
 
   async function mountAndWait() {
-    wrapper = mount(RequirementsView, { props: { apiBaseUrl: baseUrl, currentAccount } });
+    wrapper = mount(RequirementsView, {
+      props: { apiBaseUrl: baseUrl, currentAccount },
+      global: { stubs: { teleport: true } },
+    });
     await waitFor(() => !wrapper!.find('[data-testid="requirements-loading"]').exists());
   }
 
@@ -38,8 +41,8 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
     await mountAndWait();
 
     await wrapper!.find(`[data-testid="new-spec-btn-${requirementId}"]`).trigger("click");
-    await wrapper!.find(`[data-testid="new-spec-title-${requirementId}"]`).setValue("規格A-1");
-    await wrapper!.find(`[data-testid="new-spec-form-${requirementId}"]`).trigger("submit");
+    await wrapper!.find('[data-testid="new-spec-title"]').setValue("規格A-1");
+    await wrapper!.find('[data-testid="new-spec-form"]').trigger("submit");
 
     await waitFor(() => wrapper!.text().includes("規格A-1"));
     expect(service.getRequirement(requirementId).specs.some((s) => s.title === "規格A-1")).toBe(true);
@@ -49,9 +52,9 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
     await mountAndWait();
 
     await wrapper!.find(`[data-testid="new-spec-btn-${requirementId}"]`).trigger("click");
-    await wrapper!.find(`[data-testid="new-spec-form-${requirementId}"]`).trigger("submit");
+    await wrapper!.find('[data-testid="new-spec-form"]').trigger("submit");
 
-    await waitFor(() => wrapper!.find(`[data-testid="new-spec-error-${requirementId}"]`).exists());
+    await waitFor(() => wrapper!.find('[data-testid="new-spec-error"]').exists());
     expect(service.getRequirement(requirementId).specs).toHaveLength(0);
   });
 

@@ -281,6 +281,7 @@ defineExpose({ reload: load });
                 v-for="item in column.items"
                 :key="item.id"
                 class="card"
+                :class="`pri-${item.priority}-bar`"
                 :draggable="item.kind === 'task'"
                 :data-testid="`card-${item.id}`"
                 @dragstart="onDragStart(item)"
@@ -298,7 +299,7 @@ defineExpose({ reload: load });
                       >{{ initials(owner) }}</span
                     >{{ item.owners.join("、") }}</span
                   >
-                  <span class="priority">{{ item.priority }}</span>
+                  <span class="priority" :class="`pri-${item.priority}`">{{ item.priority }}</span>
                   <span v-if="item.dueDate">{{ item.dueDate }}</span>
                   <span v-if="item.specId">📎 {{ item.specId }}</span>
                 </div>
@@ -348,6 +349,7 @@ defineExpose({ reload: load });
           :item-id="selectedItem.id"
           :kind="selectedItem.kind"
           :accounts="accountOptions"
+          :current-account="currentAccount"
           @close="selectedItem = null"
           @changed="load"
           @promoted="(taskId) => (selectedItem = { id: taskId, kind: 'task' })"
@@ -359,13 +361,7 @@ defineExpose({ reload: load });
 
 <style scoped>
 .kanban-board {
-  padding: 20px;
-  font-family:
-    -apple-system,
-    "Segoe UI",
-    "PingFang TC",
-    "Microsoft JhengHei",
-    sans-serif;
+  padding: 20px 0;
 }
 
 .board-layout {
@@ -378,30 +374,67 @@ defineExpose({ reload: load });
 .columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  gap: 14px;
   align-items: start;
 }
 
 .column {
-  background: #f5f6f8;
-  border: 1px solid #e2e4e9;
-  border-radius: 10px;
-  padding: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
 }
 
 .column h3 {
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 700;
   margin: 0 0 10px;
-  color: #6b7280;
+  padding: 0 2px;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
 }
 
 .card {
-  background: #ffffff;
-  border: 1px solid #e2e4e9;
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  margin-bottom: 10px;
   font-size: 13px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+}
+
+.card.pri-高-bar::before {
+  background: var(--danger);
+}
+
+.card.pri-中-bar::before {
+  background: var(--warning);
+}
+
+.card.pri-低-bar::before {
+  background: var(--border-strong);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
 }
 
 .card[draggable="true"] {
@@ -409,21 +442,28 @@ defineExpose({ reload: load });
 }
 
 .complete-btn {
-  margin-top: 6px;
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  border: 1px solid #2fb344;
-  background: transparent;
-  color: #2fb344;
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--success);
+  background: var(--success-tint);
+  color: var(--success);
   cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.complete-btn:hover {
+  background: var(--success);
+  color: #fff;
 }
 
 .action-error {
-  background: #fdecea;
-  color: #b3261e;
-  border: 1px solid #f5c2c0;
-  border-radius: 8px;
+  background: var(--danger-tint);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
   padding: 8px 12px;
   margin-bottom: 12px;
   font-size: 13px;
@@ -444,6 +484,7 @@ defineExpose({ reload: load });
   gap: 16px;
   margin-bottom: 16px;
   font-size: 13px;
+  flex-wrap: wrap;
 }
 
 .monthly-stats {
@@ -460,30 +501,36 @@ defineExpose({ reload: load });
 }
 
 .stat-tile {
-  background: #ffffff;
-  border: 1px solid #e2e4e9;
-  border-radius: 10px;
-  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-label {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-dim);
 }
 
 .stat-value {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
 .viewer-label {
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .scope-tabs select {
-  border: 1px solid #e2e4e9;
-  border-radius: 6px;
-  padding: 4px 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-pill);
+  padding: 5px 12px;
   font-size: 12px;
 }
 
@@ -496,18 +543,27 @@ defineExpose({ reload: load });
 
 .scope-tabs button,
 .type-filters button {
-  border: 1px solid #e2e4e9;
-  background: #fff;
-  border-radius: 999px;
-  padding: 4px 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  border-radius: var(--radius-pill);
+  padding: 5px 13px;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.scope-tabs button:hover,
+.type-filters button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .scope-tabs button.active,
 .type-filters button.active {
-  background: #3b5bfd;
-  border-color: #3b5bfd;
+  background: var(--primary);
+  border-color: var(--primary);
   color: #fff;
 }
 
@@ -515,7 +571,7 @@ defineExpose({ reload: load });
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #4b5563;
+  color: var(--text-dim);
 }
 
 .avatar-mini {
@@ -529,6 +585,7 @@ defineExpose({ reload: load });
   font-weight: 700;
   color: #ffffff;
   margin-left: -4px;
+  border: 1.5px solid var(--surface);
 }
 
 .avatar-mini:first-child {
@@ -536,35 +593,72 @@ defineExpose({ reload: load });
 }
 
 .card-title {
-  font-weight: 500;
-  margin-bottom: 4px;
+  font-weight: 600;
+  margin-bottom: 5px;
+  padding-left: 3px;
+  color: var(--text);
 }
 
 .card-meta {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-dim);
+  padding-left: 3px;
 }
 
 .badge {
-  background: #e6ebff;
-  color: #3b5bfd;
-  border-radius: 10px;
-  padding: 1px 7px;
-  font-weight: 600;
+  background: var(--primary-tint);
+  color: var(--primary);
+  border-radius: var(--radius-pill);
+  padding: 1px 8px;
+  font-weight: 700;
+  font-size: 10.5px;
+}
+
+.priority {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.priority::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.priority.pri-高 {
+  color: var(--danger);
+}
+
+.priority.pri-中 {
+  color: var(--warning);
+}
+
+.priority.pri-低 {
+  color: var(--text-faint);
 }
 
 .recently-completed {
-  margin-top: 16px;
+  margin-top: 18px;
 }
 
 .recently-completed summary {
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  color: #6b7280;
-  padding: 6px 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  padding: 8px 2px;
+}
+
+@media (max-width: 720px) {
+  .board-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

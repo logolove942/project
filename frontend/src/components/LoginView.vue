@@ -36,6 +36,7 @@ async function submit() {
 <template>
   <div class="login-shell" data-testid="login-view">
     <div class="login-card">
+      <div class="brand-mark">◆</div>
       <h1>工作台</h1>
       <p class="subtitle">團隊任務 · 個人雜事</p>
 
@@ -82,88 +83,122 @@ async function submit() {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family:
-    -apple-system,
-    "Segoe UI",
-    "PingFang TC",
-    "Microsoft JhengHei",
-    sans-serif;
+  padding: 20px;
 }
 
 .login-card {
-  width: 320px;
-  background: #ffffff;
-  border: 1px solid #e2e4e9;
+  width: 340px;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 28px 26px;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 12px;
   border-radius: 10px;
-  padding: 28px 24px;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 800;
+  box-shadow: var(--shadow-sm);
 }
 
 h1 {
   font-size: 18px;
   margin: 0 0 2px;
   text-align: center;
+  color: var(--text);
 }
 
 .subtitle {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-faint);
   text-align: center;
-  margin: 0 0 18px;
+  margin: 0 0 20px;
 }
 
 .mode-tabs {
   display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
+  gap: 2px;
+  margin-bottom: 18px;
+  background: var(--surface-2);
+  padding: 3px;
+  border-radius: var(--radius-pill);
 }
 
 .mode-tabs button {
   flex: 1;
-  border: 1px solid #e2e4e9;
-  background: #fff;
-  border-radius: 999px;
-  padding: 6px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: var(--radius-pill);
+  padding: 7px 0;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.12s ease;
 }
 
 .mode-tabs button.active {
-  background: #3b5bfd;
-  border-color: #3b5bfd;
-  color: #fff;
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
 }
 
 form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 label {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   font-size: 12px;
-  color: #6b7280;
+  font-weight: 600;
+  color: var(--text-dim);
 }
 
 input {
-  border: 1px solid #e2e4e9;
-  border-radius: 6px;
-  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
   font-size: 13px;
-  color: #1b1e24;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+
+input:focus {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-focus);
 }
 
 button[type="submit"] {
   margin-top: 4px;
-  background: #3b5bfd;
+  background: var(--primary);
   color: #fff;
   border: none;
-  border-radius: 6px;
-  padding: 8px 0;
+  border-radius: var(--radius-sm);
+  padding: 9px 0;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+button[type="submit"]:hover:not(:disabled) {
+  background: var(--primary-hover);
 }
 
 button[type="submit"]:disabled {
@@ -172,7 +207,7 @@ button[type="submit"]:disabled {
 }
 
 .error {
-  color: #b3261e;
+  color: var(--danger);
   font-size: 12px;
   margin: 0;
 }

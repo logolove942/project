@@ -27,7 +27,10 @@ describe("KanbanBoard - 快速新增提醒/雜事", () => {
   // issue #49：身分就是登入帳號，不再是自由輸入的「我是」——用這個名字登入即可。
   async function mountAndSetViewer(viewer: string) {
     const currentAccount: Account = await loginForTest(baseUrl, viewer, "pw");
-    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
+    wrapper = mount(KanbanBoard, {
+      props: { apiBaseUrl: baseUrl, currentAccount },
+      global: { stubs: { teleport: true } },
+    });
     await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
   }
 

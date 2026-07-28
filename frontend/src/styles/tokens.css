@@ -1,0 +1,92 @@
+/* 設計語彙沿用 prototype/unified-visual-redesign.html 驗證過的 Enterprise SaaS
+   視覺方向（indigo/violet 主色、陰影、圓角），套進真正的元件；深色模式跟隨
+   系統 prefers-color-scheme 自動切換，不提供手動切換開關。 */
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text: #0f172a;
+  --text-dim: #64748b;
+  --text-faint: #94a3b8;
+
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-tint: #eef2ff;
+  --primary-tint-strong: #e0e7ff;
+  --secondary: #7c3aed;
+  --secondary-tint: #f3e8ff;
+
+  --success: #16a34a;
+  --success-tint: #dcfce7;
+  --warning: #d97706;
+  --warning-tint: #fef3c7;
+  --danger: #dc2626;
+  --danger-tint: #fee2e2;
+  --slate: #64748b;
+  --slate-tint: #f1f5f9;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 32px -8px rgba(79, 70, 229, 0.18), 0 4px 12px -4px rgba(15, 23, 42, 0.08);
+  --shadow-focus: 0 0 0 3px rgba(79, 70, 229, 0.15);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  --font-sans:
+    -apple-system, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1120;
+    --surface: #131b2e;
+    --surface-2: #1a2338;
+    --border: #263049;
+    --border-strong: #33405e;
+    --text: #eef1f8;
+    --text-dim: #9aa6bc;
+    --text-faint: #6c7891;
+
+    --primary: #818cf8;
+    --primary-hover: #a5b4fc;
+    --primary-tint: #1d2547;
+    --primary-tint-strong: #262f5c;
+    --secondary: #c4b5fd;
+    --secondary-tint: #2c2153;
+
+    --success: #4ade80;
+    --success-tint: #123822;
+    --warning: #fbbf24;
+    --warning-tint: #3d2e0b;
+    --danger: #f87171;
+    --danger-tint: #3b1616;
+    --slate: #9aa6bc;
+    --slate-tint: #1a2338;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 14px -2px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 16px 40px -10px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(129, 140, 248, 0.08);
+    --shadow-focus: 0 0 0 3px rgba(129, 140, 248, 0.25);
+  }
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}

@@ -15,6 +15,7 @@ import {
   startTask,
 } from "../api/client";
 import { avatarColor, initials } from "../avatarUtils";
+import { today } from "../dateUtils";
 import type { Account, Reminder, Task, WorkLogEntry } from "../types";
 
 const props = defineProps<{
@@ -22,6 +23,7 @@ const props = defineProps<{
   itemId: string;
   kind: "task" | "reminder";
   accounts: Account[];
+  currentAccount: Account;
 }>();
 const emit = defineEmits<{ close: []; changed: []; promoted: [taskId: string] }>();
 
@@ -31,9 +33,14 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 const statusError = ref<string | null>(null);
 
-const person = ref("");
-const date = ref("");
-const hours = ref<number | null>(null);
+// 報工表單預設：人員＝自己、日期＝今天、時數＝1 小時——大部分報工都是「自己剛做完的事」，
+// 讓最常見的情況不用每次都手動填三個欄位；不合用時仍可自由改掉。
+function defaultWorkLogPerson() {
+  return props.currentAccount.name;
+}
+const person = ref(defaultWorkLogPerson());
+const date = ref(today());
+const hours = ref<number | null>(1);
 const note = ref("");
 const submitError = ref<string | null>(null);
 
@@ -137,8 +144,9 @@ async function submitWorkLog() {
     } else {
       await logReminderWork(props.apiBaseUrl, props.itemId, entry);
     }
-    person.value = "";
-    hours.value = null;
+    person.value = defaultWorkLogPerson();
+    date.value = today();
+    hours.value = 1;
     note.value = "";
     await load();
   } catch (e) {
@@ -170,18 +178,20 @@ defineExpose({ reload: load });
 
       <h3>狀態</h3>
       <select
+        class="status-select"
         :value="detail.status"
         data-testid="status-select"
         @change="onStatusChange(($event.target as HTMLSelectElement).value)"
       >
         <option v-for="option in statusOptions" :key="option" :value="option">{{ option }}</option>
       </select>
-      <p v-if="statusError" data-testid="status-error">{{ statusError }}</p>
+      <p v-if="statusError" class="inline-error" data-testid="status-error">{{ statusError }}</p>
 
       <template v-if="kind === 'reminder'">
         <button
           v-if="!showPromoteForm"
           type="button"
+          class="btn-ghost btn-sm"
           data-testid="promote-btn"
           @click="showPromoteForm = true"
         >
@@ -199,13 +209,13 @@ defineExpose({ reload: load });
             placeholder="負責人"
             data-testid="promote-assignee"
           />
-          <button type="submit" data-testid="promote-submit">確認升級</button>
+          <button type="submit" class="btn-primary btn-sm" data-testid="promote-submit">確認升級</button>
         </form>
-        <p v-if="promoteError" data-testid="promote-error">{{ promoteError }}</p>
+        <p v-if="promoteError" class="inline-error" data-testid="promote-error">{{ promoteError }}</p>
       </template>
 
-      <h3>報工紀錄</h3>
-      <p v-if="!workLogs.length" data-testid="worklog-empty">尚無報工紀錄</p>
+      <h3>報工紀錄（全體同仁可見）</h3>
+      <p v-if="!workLogs.length" class="empty-note" data-testid="worklog-empty">尚無報工紀錄</p>
       <ul v-else data-testid="worklog-list">
         <li v-for="log in workLogs" :key="log.id" :data-testid="`worklog-${log.id}`">
           <span class="avatar-mini" :style="{ background: avatarColor(log.person) }">{{ initials(log.person) }}</span>
@@ -214,7 +224,7 @@ defineExpose({ reload: load });
       </ul>
 
       <h3>新增報工</h3>
-      <form @submit.prevent="submitWorkLog">
+      <form class="worklog-form" @submit.prevent="submitWorkLog">
         <select v-model="person" data-testid="worklog-person">
           <option value="">選擇人員</option>
           <option v-for="account in accounts" :key="account.id" :value="account.name">
@@ -229,10 +239,10 @@ defineExpose({ reload: load });
           placeholder="時數"
           data-testid="worklog-hours"
         />
-        <input v-model="note" type="text" placeholder="備註" data-testid="worklog-note" />
-        <button type="submit" data-testid="worklog-submit">送出報工</button>
+        <input v-model="note" type="text" placeholder="備註（選填）" data-testid="worklog-note" />
+        <button type="submit" class="btn-primary btn-sm" data-testid="worklog-submit">送出報工</button>
       </form>
-      <p v-if="submitError" data-testid="worklog-error">{{ submitError }}</p>
+      <p v-if="submitError" class="inline-error" data-testid="worklog-error">{{ submitError }}</p>
     </template>
   </div>
 </template>
@@ -240,32 +250,56 @@ defineExpose({ reload: load });
 <style scoped>
 .detail-panel {
   position: relative;
-  background: #ffffff;
-  border: 1px solid #e2e4e9;
-  border-radius: 10px;
-  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 18px;
   font-size: 13px;
 }
 
 .detail-panel h2 {
   font-size: 15px;
-  margin: 0 20px 8px 0;
+  font-weight: 700;
+  margin: 0 20px 10px 0;
+  color: var(--text);
 }
 
 .detail-panel h3 {
-  font-size: 13px;
-  margin: 16px 0 6px;
-  color: #6b7280;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 18px 0 8px;
+  color: var(--text-faint);
 }
 
 .close-btn {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 14px;
+  right: 14px;
   border: none;
-  background: transparent;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+}
+
+.close-btn:hover {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+
+.status-select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .detail-panel ul {
@@ -273,15 +307,20 @@ defineExpose({ reload: load });
   margin: 0;
   padding: 0;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-dim);
 }
 
 .detail-panel li {
-  border-top: 1px solid #e2e4e9;
-  padding: 6px 0;
+  border-top: 1px dashed var(--border);
+  padding: 8px 0;
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.empty-note {
+  color: var(--text-faint);
+  font-size: 12px;
 }
 
 .avatar-mini {
@@ -299,34 +338,85 @@ defineExpose({ reload: load });
 
 .detail-panel form {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
 }
 
-.detail-panel form input {
-  border: 1px solid #e2e4e9;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 13px;
+.worklog-form {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
 }
 
-.detail-panel form button {
-  align-self: flex-start;
-  background: #3b5bfd;
+.detail-panel form input,
+.detail-panel form select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 9px;
+  font-size: 12.5px;
+  background: var(--surface);
+  color: var(--text);
+  outline: none;
+}
+
+.detail-panel form input:focus,
+.detail-panel form select:focus {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.btn-primary {
+  background: var(--primary);
   color: #fff;
   border: none;
-  border-radius: 6px;
-  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-primary.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-ghost:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.btn-ghost.btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
 }
 
 [data-testid="promote-btn"] {
-  border: 1px solid #3b5bfd;
+  border: 1px solid var(--primary);
   background: transparent;
-  color: #3b5bfd;
-  border-radius: 6px;
-  padding: 4px 10px;
+  color: var(--primary);
+}
+
+.inline-error {
+  color: var(--danger);
   font-size: 12px;
-  cursor: pointer;
+  margin: 6px 0 0;
 }
 </style>

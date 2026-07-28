@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
+import { today } from "../dateUtils";
 import { loginForTest, registerAccountForTest, waitFor } from "../testSupport";
 import type { Account } from "../types";
 import KanbanBoard from "./KanbanBoard.vue";
@@ -104,6 +105,47 @@ describe("KanbanBoard - 詳情面板：檢視資訊＋報工", () => {
     await waitFor(() => !wrapper!.find('[data-testid="detail-loading"]').exists());
 
     expect(wrapper!.find('[data-testid="worklog-empty"]').exists()).toBe(true);
+  });
+
+  // 報工表單預設：人員＝自己、日期＝今天、時數＝1 小時（使用者反饋：大部分報工都是「自己剛做完的事」）。
+  it("defaults the work-log form to self / today / 1 hour, without touching it", async () => {
+    const task = service.createTask(specId, {
+      type: "開發任務",
+      title: "任務A",
+      assignees: [{ person: "小美" }],
+    });
+    await mountAndWait();
+
+    await wrapper!.find(`[data-testid="card-${task.id}"]`).trigger("click");
+    await waitFor(() => !wrapper!.find('[data-testid="detail-loading"]').exists());
+
+    expect((wrapper!.find('[data-testid="worklog-person"]').element as HTMLSelectElement).value).toBe(
+      currentAccount.name,
+    );
+    expect((wrapper!.find('[data-testid="worklog-date"]').element as HTMLInputElement).value).toBe(today());
+    expect((wrapper!.find('[data-testid="worklog-hours"]').element as HTMLInputElement).value).toBe("1");
+  });
+
+  it("resets the work-log form back to the defaults (not blank) after a successful submit", async () => {
+    const task = service.createTask(specId, {
+      type: "開發任務",
+      title: "任務A",
+      assignees: [{ person: "小美" }],
+    });
+    await mountAndWait();
+
+    await wrapper!.find(`[data-testid="card-${task.id}"]`).trigger("click");
+    await waitFor(() => !wrapper!.find('[data-testid="detail-loading"]').exists());
+
+    await wrapper!.find('[data-testid="worklog-person"]').setValue("小美");
+    await wrapper!.find('[data-testid="worklog-hours"]').setValue("3");
+    await wrapper!.find("form").trigger("submit");
+    await waitFor(() => !wrapper!.find('[data-testid="worklog-empty"]').exists());
+
+    expect((wrapper!.find('[data-testid="worklog-person"]').element as HTMLSelectElement).value).toBe(
+      currentAccount.name,
+    );
+    expect((wrapper!.find('[data-testid="worklog-hours"]').element as HTMLInputElement).value).toBe("1");
   });
 
   it("adds a work log through the form and shows it in the list", async () => {

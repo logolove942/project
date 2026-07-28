@@ -30,7 +30,10 @@ describe("RequirementsView - 需求/規格管理", () => {
     const requirement = service.createRequirement("需求A");
     service.createSpec(requirement.id, "規格A-1");
 
-    wrapper = mount(RequirementsView, { props: { apiBaseUrl: baseUrl, currentAccount } });
+    wrapper = mount(RequirementsView, {
+      props: { apiBaseUrl: baseUrl, currentAccount },
+      global: { stubs: { teleport: true } },
+    });
     await waitFor(() => !wrapper!.find('[data-testid="requirements-loading"]').exists());
 
     expect(wrapper.find(`[data-testid="requirement-${requirement.id}"]`).text()).toContain("需求A");
@@ -38,9 +41,13 @@ describe("RequirementsView - 需求/規格管理", () => {
   });
 
   it("creates a new requirement and shows it in the list immediately", async () => {
-    wrapper = mount(RequirementsView, { props: { apiBaseUrl: baseUrl, currentAccount } });
+    wrapper = mount(RequirementsView, {
+      props: { apiBaseUrl: baseUrl, currentAccount },
+      global: { stubs: { teleport: true } },
+    });
     await waitFor(() => !wrapper!.find('[data-testid="requirements-loading"]').exists());
 
+    await wrapper.find('[data-testid="new-requirement-btn"]').trigger("click");
     await wrapper.find('[data-testid="new-requirement-title"]').setValue("新的需求");
     await wrapper.find('[data-testid="new-requirement-form"]').trigger("submit");
 
@@ -49,9 +56,13 @@ describe("RequirementsView - 需求/規格管理", () => {
   });
 
   it("shows an inline error when submitting without a title", async () => {
-    wrapper = mount(RequirementsView, { props: { apiBaseUrl: baseUrl, currentAccount } });
+    wrapper = mount(RequirementsView, {
+      props: { apiBaseUrl: baseUrl, currentAccount },
+      global: { stubs: { teleport: true } },
+    });
     await waitFor(() => !wrapper!.find('[data-testid="requirements-loading"]').exists());
 
+    await wrapper.find('[data-testid="new-requirement-btn"]').trigger("click");
     await wrapper.find('[data-testid="new-requirement-form"]').trigger("submit");
 
     await waitFor(() => wrapper!.find('[data-testid="new-requirement-error"]').exists());
@@ -64,11 +75,14 @@ describe("RequirementsView - 需求/規格管理", () => {
     const spec = service.createSpec(requirement.id, "規格A-1");
     const member = await loginForTest(baseUrl, "小美"); // 第二個註冊的帳號 -> 一般同仁
 
-    wrapper = mount(RequirementsView, { props: { apiBaseUrl: baseUrl, currentAccount: member } });
+    wrapper = mount(RequirementsView, {
+      props: { apiBaseUrl: baseUrl, currentAccount: member },
+      global: { stubs: { teleport: true } },
+    });
     await waitFor(() => !wrapper!.find('[data-testid="requirements-loading"]').exists());
     await waitFor(() => wrapper!.find(`[data-testid="spec-${spec.id}"]`).exists());
 
-    expect(wrapper.find('[data-testid="new-requirement-form"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="new-requirement-btn"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="requirements-readonly-note"]').exists()).toBe(true);
     expect(wrapper.find(`[data-testid="new-spec-btn-${requirement.id}"]`).exists()).toBe(false);
     expect(wrapper.find(`[data-testid="spec-${spec.id}"] [data-testid="quick-add-task-btn"]`).exists()).toBe(false);

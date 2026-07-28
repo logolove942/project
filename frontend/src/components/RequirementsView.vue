@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { createRequirement, createSpec, fetchAccounts, fetchRequirements } from "../api/client";
 import type { Account, RequirementWithSpecs } from "../types";
+import Modal from "./Modal.vue";
 import QuickAddTask from "./QuickAddTask.vue";
 
 const props = defineProps<{ apiBaseUrl: string; currentAccount: Account }>();
@@ -23,26 +24,6 @@ async function loadAccountOptions() {
   }
 }
 
-const newTitle = ref("");
-const submitting = ref(false);
-const submitError = ref<string | null>(null);
-
-// 每個需求各自獨立的「新增規格」表單狀態，用需求 id 當 key。
-interface SpecFormState {
-  show: boolean;
-  title: string;
-  submitting: boolean;
-  error: string | null;
-}
-const specForms = reactive<Record<string, SpecFormState>>({});
-
-function specForm(requirementId: string): SpecFormState {
-  if (!specForms[requirementId]) {
-    specForms[requirementId] = { show: false, title: "", submitting: false, error: null };
-  }
-  return specForms[requirementId];
-}
-
 async function load() {
   loading.value = true;
   error.value = null;
@@ -55,6 +36,22 @@ async function load() {
   }
 }
 
+// 新增需求：彈窗表單（issue：新增動作改用彈窗，操作比行內展開表單更明確）。
+const showNewRequirement = ref(false);
+const newTitle = ref("");
+const submitting = ref(false);
+const submitError = ref<string | null>(null);
+
+function openNewRequirement() {
+  showNewRequirement.value = true;
+}
+
+function closeNewRequirement() {
+  showNewRequirement.value = false;
+  newTitle.value = "";
+  submitError.value = null;
+}
+
 async function submitNewRequirement() {
   submitError.value = null;
   if (!newTitle.value) {
@@ -64,7 +61,7 @@ async function submitNewRequirement() {
   submitting.value = true;
   try {
     await createRequirement(props.apiBaseUrl, newTitle.value);
-    newTitle.value = "";
+    closeNewRequirement();
     await load();
   } catch (e) {
     submitError.value = e instanceof Error ? e.message : "新增需求失敗";
@@ -73,23 +70,38 @@ async function submitNewRequirement() {
   }
 }
 
-async function submitNewSpec(requirementId: string) {
-  const form = specForm(requirementId);
-  form.error = null;
-  if (!form.title) {
-    form.error = "請填寫標題";
+// 新增規格：彈窗會自動帶入是在哪個需求底下開的（情境預選），不用再選一次需求。
+const newSpecRequirementId = ref<string | null>(null);
+const newSpecTitle = ref("");
+const newSpecSubmitting = ref(false);
+const newSpecError = ref<string | null>(null);
+
+function openNewSpec(requirementId: string) {
+  newSpecRequirementId.value = requirementId;
+  newSpecTitle.value = "";
+  newSpecError.value = null;
+}
+
+function closeNewSpec() {
+  newSpecRequirementId.value = null;
+}
+
+async function submitNewSpec() {
+  if (!newSpecRequirementId.value) return;
+  newSpecError.value = null;
+  if (!newSpecTitle.value) {
+    newSpecError.value = "請填寫標題";
     return;
   }
-  form.submitting = true;
+  newSpecSubmitting.value = true;
   try {
-    await createSpec(props.apiBaseUrl, requirementId, form.title);
-    form.title = "";
-    form.show = false;
+    await createSpec(props.apiBaseUrl, newSpecRequirementId.value, newSpecTitle.value);
+    closeNewSpec();
     await load();
   } catch (e) {
-    form.error = e instanceof Error ? e.message : "新增規格失敗";
+    newSpecError.value = e instanceof Error ? e.message : "新增規格失敗";
   } finally {
-    form.submitting = false;
+    newSpecSubmitting.value = false;
   }
 }
 
@@ -107,21 +119,47 @@ defineExpose({ reload: load });
 
 <template>
   <div class="requirements-view" data-testid="requirements-view">
-    <h2>需求/規格管理</h2>
-
-    <form v-if="isAdmin" class="add-form" data-testid="new-requirement-form" @submit.prevent="submitNewRequirement">
-      <input
-        v-model="newTitle"
-        type="text"
-        placeholder="新需求標題"
-        data-testid="new-requirement-title"
-      />
-      <button type="submit" :disabled="submitting" data-testid="new-requirement-submit">+ 新增需求</button>
-      <p v-if="submitError" data-testid="new-requirement-error">{{ submitError }}</p>
-    </form>
-    <p v-else class="readonly-note" data-testid="requirements-readonly-note">
+    <div class="view-header">
+      <h2>需求/規格管理</h2>
+      <button v-if="isAdmin" type="button" class="btn-primary" data-testid="new-requirement-btn" @click="openNewRequirement">
+        + 新增需求
+      </button>
+    </div>
+    <p v-if="!isAdmin" class="readonly-note" data-testid="requirements-readonly-note">
       僅管理職可以新增需求、規格與任務；可以檢視進度、建立提醒與報工。
     </p>
+
+    <Modal v-if="showNewRequirement" title="新增需求" @close="closeNewRequirement">
+      <form data-testid="new-requirement-form" @submit.prevent="submitNewRequirement">
+        <label class="field">
+          標題
+          <input v-model="newTitle" type="text" placeholder="新需求標題" data-testid="new-requirement-title" />
+        </label>
+        <p v-if="submitError" class="form-error" data-testid="new-requirement-error">{{ submitError }}</p>
+        <div class="form-actions">
+          <button type="button" class="btn-ghost" @click="closeNewRequirement">取消</button>
+          <button type="submit" class="btn-primary" :disabled="submitting" data-testid="new-requirement-submit">
+            送出
+          </button>
+        </div>
+      </form>
+    </Modal>
+
+    <Modal v-if="newSpecRequirementId" title="新增規格" @close="closeNewSpec">
+      <form data-testid="new-spec-form" @submit.prevent="submitNewSpec">
+        <label class="field">
+          標題
+          <input v-model="newSpecTitle" type="text" placeholder="新規格標題" data-testid="new-spec-title" />
+        </label>
+        <p v-if="newSpecError" class="form-error" data-testid="new-spec-error">{{ newSpecError }}</p>
+        <div class="form-actions">
+          <button type="button" class="btn-ghost" data-testid="new-spec-cancel" @click="closeNewSpec">取消</button>
+          <button type="submit" class="btn-primary" :disabled="newSpecSubmitting" data-testid="new-spec-submit">
+            送出
+          </button>
+        </div>
+      </form>
+    </Modal>
 
     <p v-if="loading" data-testid="requirements-loading">載入中…</p>
     <p v-else-if="error" data-testid="requirements-error">{{ error }}</p>
@@ -149,40 +187,15 @@ defineExpose({ reload: load });
           </li>
         </ul>
 
-        <template v-if="isAdmin">
-          <button
-            v-if="!specForm(requirement.id).show"
-            type="button"
-            :data-testid="`new-spec-btn-${requirement.id}`"
-            @click="specForm(requirement.id).show = true"
-          >
-            + 新增規格
-          </button>
-          <form
-            v-else
-            class="add-form"
-            :data-testid="`new-spec-form-${requirement.id}`"
-            @submit.prevent="submitNewSpec(requirement.id)"
-          >
-            <input
-              v-model="specForm(requirement.id).title"
-              type="text"
-              placeholder="新規格標題"
-              :data-testid="`new-spec-title-${requirement.id}`"
-            />
-            <button
-              type="submit"
-              :disabled="specForm(requirement.id).submitting"
-              :data-testid="`new-spec-submit-${requirement.id}`"
-            >
-              送出
-            </button>
-            <button type="button" @click="specForm(requirement.id).show = false">取消</button>
-            <p v-if="specForm(requirement.id).error" :data-testid="`new-spec-error-${requirement.id}`">
-              {{ specForm(requirement.id).error }}
-            </p>
-          </form>
-        </template>
+        <button
+          v-if="isAdmin"
+          type="button"
+          class="add-inline-btn"
+          :data-testid="`new-spec-btn-${requirement.id}`"
+          @click="openNewSpec(requirement.id)"
+        >
+          + 新增規格
+        </button>
       </li>
     </ul>
   </div>
@@ -190,56 +203,104 @@ defineExpose({ reload: load });
 
 <style scoped>
 .requirements-view {
-  padding: 20px;
-  font-family:
-    -apple-system,
-    "Segoe UI",
-    "PingFang TC",
-    "Microsoft JhengHei",
-    sans-serif;
+  padding: 20px 0;
   font-size: 13px;
+}
+
+.view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
 }
 
 .requirements-view h2 {
-  font-size: 15px;
-  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text);
 }
 
-.add-form {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.add-form input {
-  border: 1px solid #e2e4e9;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 13px;
-}
-
-.add-form button {
-  background: #3b5bfd;
+.btn-primary {
+  background: var(--primary);
   color: #fff;
   border: none;
-  border-radius: 6px;
-  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
 }
 
-[data-testid="new-requirement-error"] {
-  color: #b3261e;
+.btn-ghost:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   font-size: 12px;
-  margin: 0;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+
+.field input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+.field input:focus {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.form-error {
+  color: var(--danger);
+  font-size: 12px;
+  margin: -6px 0 12px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .readonly-note {
-  background: #f5f6f8;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
   padding: 10px 14px;
-  color: #6b7280;
+  color: var(--text-dim);
   margin-bottom: 16px;
 }
 
@@ -250,22 +311,29 @@ defineExpose({ reload: load });
 }
 
 .requirement-row {
-  background: #f5f6f8;
-  border: 1px solid #e2e4e9;
-  border-radius: 10px;
-  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
   margin-bottom: 10px;
+  box-shadow: var(--shadow-sm);
 }
 
 .requirement-title {
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .spec-list {
   list-style: none;
-  margin: 6px 0 0;
-  padding: 0 0 0 12px;
-  color: #6b7280;
+  margin: 8px 0 0;
+  padding: 0;
+  color: var(--text-dim);
+}
+
+.spec-list li {
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
 }
 
 .spec-row {
@@ -274,18 +342,19 @@ defineExpose({ reload: load });
   gap: 8px;
 }
 
-.requirement-row > button,
-.requirement-row > .add-form {
-  margin-top: 8px;
+.add-inline-btn {
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-top: 10px;
 }
 
-[data-testid^="new-spec-btn-"] {
-  border: 1px solid #3b5bfd;
-  background: transparent;
-  color: #3b5bfd;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 12px;
-  cursor: pointer;
+.add-inline-btn:hover {
+  background: var(--primary-tint);
 }
 </style>

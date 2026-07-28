@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { createReminder } from "../api/client";
 import type { Account, Priority } from "../types";
+import Modal from "./Modal.vue";
 
 const props = defineProps<{
   apiBaseUrl: string;
@@ -63,87 +64,149 @@ async function submit() {
 
 <template>
   <div class="quick-add-reminder">
-    <button v-if="!showForm" type="button" data-testid="quick-add-reminder-btn" @click="openForm">
+    <button type="button" class="trigger-btn" data-testid="quick-add-reminder-btn" @click="openForm">
       + 新增提醒/雜事
     </button>
-    <form v-else class="add-form" data-testid="quick-add-reminder-form" @submit.prevent="submit">
-      <input v-model="title" type="text" placeholder="標題" data-testid="quick-add-reminder-title" />
-      <select v-model="assignedTo" data-testid="quick-add-reminder-assignee">
-        <option v-for="account in accounts" :key="account.id" :value="account.name">
-          {{ account.name }}
-        </option>
-      </select>
-      <select v-model="specId" data-testid="quick-add-reminder-spec">
-        <option value="">未關聯規格</option>
-        <option v-for="spec in specs" :key="spec.id" :value="spec.id">{{ spec.label }}</option>
-      </select>
-      <select v-model="priority" data-testid="quick-add-reminder-priority">
-        <option value="高">高</option>
-        <option value="中">中</option>
-        <option value="低">低</option>
-      </select>
-      <input v-model="dueDate" type="date" data-testid="quick-add-reminder-duedate" />
-      <div class="form-actions">
-        <button type="submit" :disabled="submitting" data-testid="quick-add-reminder-submit">送出</button>
-        <button type="button" data-testid="quick-add-reminder-cancel" @click="resetForm">取消</button>
-      </div>
-      <p v-if="submitError" data-testid="quick-add-reminder-error">{{ submitError }}</p>
-    </form>
+
+    <Modal v-if="showForm" title="新增提醒" @close="resetForm">
+      <form data-testid="quick-add-reminder-form" @submit.prevent="submit">
+        <label class="field">
+          標題
+          <input v-model="title" type="text" placeholder="例如：幫忙確認測試環境" data-testid="quick-add-reminder-title" />
+        </label>
+        <label class="field">
+          對象
+          <select v-model="assignedTo" data-testid="quick-add-reminder-assignee">
+            <option v-for="account in accounts" :key="account.id" :value="account.name">
+              {{ account.name }}
+            </option>
+          </select>
+        </label>
+        <label class="field">
+          關聯規格（選填）
+          <select v-model="specId" data-testid="quick-add-reminder-spec">
+            <option value="">未關聯規格</option>
+            <option v-for="spec in specs" :key="spec.id" :value="spec.id">{{ spec.label }}</option>
+          </select>
+        </label>
+        <label class="field">
+          優先級
+          <select v-model="priority" data-testid="quick-add-reminder-priority">
+            <option value="高">高</option>
+            <option value="中">中</option>
+            <option value="低">低</option>
+          </select>
+        </label>
+        <label class="field">
+          到期日（選填）
+          <input v-model="dueDate" type="date" data-testid="quick-add-reminder-duedate" />
+        </label>
+
+        <p v-if="submitError" class="form-error" data-testid="quick-add-reminder-error">{{ submitError }}</p>
+        <div class="form-actions">
+          <button type="button" class="btn-ghost" data-testid="quick-add-reminder-cancel" @click="resetForm">
+            取消
+          </button>
+          <button type="submit" class="btn-primary" :disabled="submitting" data-testid="quick-add-reminder-submit">
+            送出
+          </button>
+        </div>
+      </form>
+    </Modal>
   </div>
 </template>
 
 <style scoped>
-.quick-add-reminder button[data-testid="quick-add-reminder-btn"] {
-  border: 1px solid #3b5bfd;
+.trigger-btn {
+  border: 1px solid var(--primary);
   background: transparent;
-  color: #3b5bfd;
-  border-radius: 6px;
-  padding: 4px 10px;
+  color: var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.12s ease;
 }
 
-.add-form {
+.trigger-btn:hover {
+  background: var(--primary-tint);
+}
+
+.field {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 14px;
 }
 
-.add-form input,
-.add-form select {
-  border: 1px solid #e2e4e9;
-  border-radius: 6px;
-  padding: 4px 8px;
+.field input,
+.field select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
   font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-focus);
 }
 
 .form-actions {
   display: flex;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }
 
-.form-actions button[type="submit"] {
-  background: #3b5bfd;
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-ghost:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.btn-primary {
+  background: var(--primary);
   color: #fff;
   border: none;
-  border-radius: 6px;
-  padding: 4px 12px;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.12s ease;
 }
 
-.form-actions button[type="button"] {
-  background: transparent;
-  border: 1px solid #e2e4e9;
-  border-radius: 6px;
-  padding: 4px 12px;
-  cursor: pointer;
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
 }
 
-[data-testid="quick-add-reminder-error"] {
-  color: #b3261e;
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.form-error {
+  color: var(--danger);
   font-size: 12px;
-  width: 100%;
-  margin: 0;
+  margin: -6px 0 12px;
 }
 </style>

@@ -2,6 +2,7 @@
 import { ref, watch } from "vue";
 import { createTask } from "../api/client";
 import type { Account, Priority, TaskAssignee } from "../types";
+import Modal from "./Modal.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -9,13 +10,12 @@ const props = withDefaults(
     specs: { id: string; label: string }[];
     accounts: Account[];
     initialSpecId?: string;
-    startOpen?: boolean;
   }>(),
-  { initialSpecId: "", startOpen: false },
+  { initialSpecId: "" },
 );
 const emit = defineEmits<{ created: [] }>();
 
-const showForm = ref(props.startOpen);
+const showForm = ref(false);
 const specId = ref(props.initialSpecId);
 const type = ref<"開發任務" | "測試任務">("開發任務");
 const title = ref("");
@@ -52,7 +52,7 @@ function resetForm() {
   priority.value = "中";
   dueDate.value = "";
   submitError.value = null;
-  showForm.value = props.startOpen;
+  showForm.value = false;
 }
 
 async function submit() {
@@ -87,122 +87,230 @@ async function submit() {
 
 <template>
   <div class="quick-add-task">
-    <button v-if="!showForm" type="button" data-testid="quick-add-task-btn" @click="openForm">
-      + 新增任務
-    </button>
-    <form v-else class="add-form" data-testid="quick-add-task-form" @submit.prevent="submit">
-      <select v-model="specId" data-testid="quick-add-task-spec">
-        <option value="">選擇規格</option>
-        <option v-for="spec in specs" :key="spec.id" :value="spec.id">{{ spec.label }}</option>
-      </select>
-      <select v-model="type" data-testid="quick-add-task-type">
-        <option value="開發任務">開發任務</option>
-        <option value="測試任務">測試任務</option>
-      </select>
-      <input v-model="title" type="text" placeholder="標題" data-testid="quick-add-task-title" />
+    <button type="button" class="trigger-btn" data-testid="quick-add-task-btn" @click="openForm">+ 新增任務</button>
 
-      <div class="assignees">
-        <div v-for="(_, index) in assignees" :key="index" class="assignee-row">
-          <select v-model="assignees[index]" :data-testid="`quick-add-task-assignee-${index}`">
-            <option value="">選擇指派對象</option>
-            <option v-for="account in accounts" :key="account.id" :value="account.name">
-              {{ account.name }}
-            </option>
+    <Modal v-if="showForm" title="新增任務" @close="resetForm">
+      <form data-testid="quick-add-task-form" @submit.prevent="submit">
+        <label v-if="!initialSpecId" class="field">
+          所屬規格
+          <select v-model="specId" data-testid="quick-add-task-spec">
+            <option value="">選擇規格</option>
+            <option v-for="spec in specs" :key="spec.id" :value="spec.id">{{ spec.label }}</option>
           </select>
-          <button
-            v-if="assignees.length > 1"
-            type="button"
-            :data-testid="`quick-add-task-remove-assignee-${index}`"
-            @click="removeAssigneeRow(index)"
-          >
-            −
+        </label>
+        <select v-else v-model="specId" class="hidden-input" data-testid="quick-add-task-spec">
+          <option v-for="spec in specs" :key="spec.id" :value="spec.id">{{ spec.label }}</option>
+        </select>
+
+        <label class="field">
+          任務類型
+          <select v-model="type" data-testid="quick-add-task-type">
+            <option value="開發任務">開發任務</option>
+            <option value="測試任務">測試任務</option>
+          </select>
+        </label>
+
+        <label class="field">
+          標題
+          <input v-model="title" type="text" placeholder="例如：登入 API 開發" data-testid="quick-add-task-title" />
+        </label>
+
+        <div class="field">
+          <span class="field-label">指派對象</span>
+          <div class="assignees">
+            <div v-for="(_, index) in assignees" :key="index" class="assignee-row">
+              <select v-model="assignees[index]" :data-testid="`quick-add-task-assignee-${index}`">
+                <option value="">選擇指派對象</option>
+                <option v-for="account in accounts" :key="account.id" :value="account.name">
+                  {{ account.name }}
+                </option>
+              </select>
+              <button
+                v-if="assignees.length > 1"
+                type="button"
+                class="icon-btn"
+                :data-testid="`quick-add-task-remove-assignee-${index}`"
+                @click="removeAssigneeRow(index)"
+              >
+                −
+              </button>
+            </div>
+            <button type="button" class="btn-ghost btn-sm" data-testid="quick-add-task-add-assignee" @click="addAssigneeRow">
+              + 新增指派對象
+            </button>
+          </div>
+        </div>
+
+        <label class="field">
+          優先級
+          <select v-model="priority" data-testid="quick-add-task-priority">
+            <option value="高">高</option>
+            <option value="中">中</option>
+            <option value="低">低</option>
+          </select>
+        </label>
+
+        <label class="field">
+          到期日（選填）
+          <input v-model="dueDate" type="date" data-testid="quick-add-task-duedate" />
+        </label>
+
+        <p v-if="submitError" class="form-error" data-testid="quick-add-task-error">{{ submitError }}</p>
+        <div class="form-actions">
+          <button type="button" class="btn-ghost" data-testid="quick-add-task-cancel" @click="resetForm">取消</button>
+          <button type="submit" class="btn-primary" :disabled="submitting" data-testid="quick-add-task-submit">
+            送出
           </button>
         </div>
-        <button type="button" data-testid="quick-add-task-add-assignee" @click="addAssigneeRow">
-          + 新增指派對象
-        </button>
-      </div>
-
-      <select v-model="priority" data-testid="quick-add-task-priority">
-        <option value="高">高</option>
-        <option value="中">中</option>
-        <option value="低">低</option>
-      </select>
-      <input v-model="dueDate" type="date" data-testid="quick-add-task-duedate" />
-
-      <div class="form-actions">
-        <button type="submit" :disabled="submitting" data-testid="quick-add-task-submit">送出</button>
-        <button type="button" data-testid="quick-add-task-cancel" @click="resetForm">取消</button>
-      </div>
-      <p v-if="submitError" data-testid="quick-add-task-error">{{ submitError }}</p>
-    </form>
+      </form>
+    </Modal>
   </div>
 </template>
 
 <style scoped>
-.quick-add-task button[data-testid="quick-add-task-btn"] {
-  border: 1px solid #3b5bfd;
+.trigger-btn {
+  border: 1px solid var(--primary);
   background: transparent;
-  color: #3b5bfd;
-  border-radius: 6px;
-  padding: 4px 10px;
+  color: var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.12s ease;
 }
 
-.add-form {
+.trigger-btn:hover {
+  background: var(--primary-tint);
+}
+
+.hidden-input {
+  display: none;
+}
+
+.field {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 14px;
 }
 
-.add-form input,
-.add-form select {
-  border: 1px solid #e2e4e9;
-  border-radius: 6px;
-  padding: 4px 8px;
+.field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.field input,
+.field select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
   font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-focus);
 }
 
 .assignees {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: 100%;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .assignee-row {
   display: flex;
-  gap: 4px;
+  gap: 6px;
+}
+
+.assignee-row select {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.icon-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  background: var(--surface-2);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-ghost:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.btn-ghost.btn-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+  align-self: flex-start;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .form-actions {
   display: flex;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
 }
 
-.form-actions button[type="submit"] {
-  background: #3b5bfd;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 4px 12px;
-  cursor: pointer;
-}
-
-.form-actions button[type="button"] {
-  background: transparent;
-  border: 1px solid #e2e4e9;
-  border-radius: 6px;
-  padding: 4px 12px;
-  cursor: pointer;
-}
-
-[data-testid="quick-add-task-error"] {
-  color: #b3261e;
+.form-error {
+  color: var(--danger);
   font-size: 12px;
-  width: 100%;
-  margin: 0;
+  margin: -6px 0 12px;
 }
 </style>

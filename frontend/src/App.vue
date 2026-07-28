@@ -65,6 +65,13 @@ async function logout() {
   <LoginView v-else-if="!currentAccount" :api-base-url="apiBaseUrl" @authenticated="onAuthenticated" />
   <div v-else class="app-shell">
     <header class="app-header">
+      <div class="brand">
+        <div class="brand-mark">◆</div>
+        <div class="brand-text">
+          <div class="brand-name">工作台</div>
+          <div class="brand-sub">團隊任務 · 個人雜事</div>
+        </div>
+      </div>
       <div class="app-tabs">
         <button
           type="button"
@@ -120,44 +127,90 @@ async function logout() {
 
 <style scoped>
 .app-shell {
-  max-width: 980px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 16px 20px 60px;
-  font-family:
-    -apple-system,
-    "Segoe UI",
-    "PingFang TC",
-    "Microsoft JhengHei",
-    sans-serif;
+  padding: 0 20px 60px;
 }
 
 .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 4px;
+  gap: 16px;
+  padding: 14px 0;
+  margin-bottom: 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 800;
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+
+.brand-name {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.brand-sub {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.2;
 }
 
 .app-tabs {
   display: flex;
-  gap: 4px;
+  gap: 2px;
+  background: var(--surface-2);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  margin-left: auto;
 }
 
 .app-tabs button {
-  border: 1px solid #e2e4e9;
-  background: #fff;
-  border-radius: 999px;
-  padding: 4px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  border-radius: var(--radius-pill);
+  padding: 6px 16px;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.app-tabs button:hover {
+  color: var(--text);
 }
 
 .app-tabs button.active {
-  background: #3b5bfd;
-  border-color: #3b5bfd;
-  color: #fff;
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .identity {
@@ -168,8 +221,8 @@ async function logout() {
 }
 
 .avatar {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   flex-shrink: 0;
   display: inline-flex;
@@ -181,27 +234,45 @@ async function logout() {
 }
 
 .role-badge {
-  font-size: 11px;
-  font-weight: 600;
-  border: 1px solid #e2e4e9;
-  background: #f5f6f8;
-  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  border: none;
+  background: var(--slate-tint);
+  border-radius: var(--radius-pill);
   padding: 2px 10px;
-  color: #6b7280;
+  color: var(--slate);
 }
 
 .role-badge.admin {
-  border-color: transparent;
-  background: #e6ebff;
-  color: #3b5bfd;
+  background: var(--primary-tint);
+  color: var(--primary);
 }
 
 .identity button {
-  border: 1px solid #e2e4e9;
-  background: transparent;
-  border-radius: 6px;
-  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
   font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.identity button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .app-header {
+    flex-wrap: wrap;
+  }
+  .app-tabs {
+    margin-left: 0;
+    order: 3;
+    width: 100%;
+  }
 }
 </style>
