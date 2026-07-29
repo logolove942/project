@@ -1,5 +1,6 @@
-import { flushPromises } from "@vue/test-utils";
+import { flushPromises, type VueWrapper } from "@vue/test-utils";
 import { setToken } from "./api/client";
+import RichTextEditor from "./components/RichTextEditor.vue";
 import type { Account } from "./types";
 
 // Real fetch() calls need actual event-loop turns to resolve, not just a
@@ -14,6 +15,20 @@ export async function waitFor(predicate: () => boolean, timeoutMs = 4000): Promi
     await new Promise((resolve) => setTimeout(resolve, 10));
     await flushPromises();
   }
+}
+
+// jsdom 沒有完整實作 contenteditable 需要的 Selection/Range API，測試無法對 RichTextEditor
+// 模擬真的打字；改用它暴露出來的 setContent（Tiptap command API）直接寫入內容。
+export async function setRichTextContent(
+  wrapper: VueWrapper,
+  testid: string,
+  html: string,
+): Promise<void> {
+  const editors = wrapper.findAllComponents(RichTextEditor);
+  const target = editors.find((editor) => editor.attributes("data-testid") === testid);
+  if (!target) throw new Error(`RichTextEditor not found for data-testid="${testid}"`);
+  target.vm.setContent(html);
+  await flushPromises();
 }
 
 // issue #48：既有的元件測試現在都要先登入才能打通任何 API 呼叫——真的呼叫

@@ -10,6 +10,10 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tiptap/extension-image": "^3.29.2",
+    "@tiptap/pm": "^3.29.2",
+    "@tiptap/starter-kit": "^3.29.2",
+    "@tiptap/vue-3": "^3.29.2",
     "vue": "^3.5.13"
   },
   "devDependencies": {

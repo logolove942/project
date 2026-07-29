@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { loginForTest, registerAccountForTest, waitFor } from "../testSupport";
+import { loginForTest, registerAccountForTest, setRichTextContent, waitFor } from "../testSupport";
 import type { Account } from "../types";
 import RequirementsView from "./RequirementsView.vue";
 
@@ -42,12 +42,12 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
 
     await wrapper!.find(`[data-testid="new-spec-btn-${requirementId}"]`).trigger("click");
     await wrapper!.find('[data-testid="new-spec-title"]').setValue("規格A-1");
-    await wrapper!.find('[data-testid="new-spec-description"]').setValue("規格內容說明");
+    await setRichTextContent(wrapper!, "new-spec-description", "規格內容說明");
     await wrapper!.find('[data-testid="new-spec-form"]').trigger("submit");
 
     await waitFor(() => wrapper!.text().includes("規格A-1"));
     const created = service.getRequirement(requirementId).specs.find((s) => s.title === "規格A-1");
-    expect(created?.description).toBe("規格內容說明");
+    expect(created?.description).toContain("規格內容說明");
   });
 
   it("shows a status badge on a spec that isn't 完成, and hides it (with a checkmark instead) once it is", async () => {

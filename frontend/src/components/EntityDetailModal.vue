@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { renderMarkdown } from "../markdown";
+import { ref, watch } from "vue";
 import type { TaskStatus } from "../types";
 import Modal from "./Modal.vue";
+import RichTextEditor from "./RichTextEditor.vue";
 
 const STATUS_OPTIONS: TaskStatus[] = ["待處理", "進行中", "暫停", "完成"];
 
@@ -38,7 +38,7 @@ watch(
   },
 );
 
-const rendered = computed(() => renderMarkdown(props.description));
+const descriptionEditorRef = ref<InstanceType<typeof RichTextEditor>>();
 
 function startEdit() {
   draftTitle.value = props.title;
@@ -55,7 +55,7 @@ function cancelEdit() {
 
 async function submitEdit() {
   saveError.value = null;
-  if (!draftTitle.value.trim() || !draftDescription.value.trim()) {
+  if (!draftTitle.value.trim() || descriptionEditorRef.value?.isEmpty !== false) {
     saveError.value = "請填寫標題與描述";
     return;
   }
@@ -77,7 +77,9 @@ defineExpose({ reportSaveError: (message: string) => (saveError.value = message)
         <h3 class="entity-title" data-testid="entity-detail-title">{{ title }}</h3>
         <span class="status-badge" data-testid="entity-detail-status">{{ status }}</span>
       </div>
-      <div class="entity-description" data-testid="entity-detail-description" v-html="rendered"></div>
+      <div class="entity-description" data-testid="entity-detail-description">
+        <RichTextEditor :model-value="description" :editable="false" />
+      </div>
       <div class="form-actions">
         <button type="button" class="btn-primary" data-testid="entity-detail-edit-btn" @click="startEdit">
           編輯
@@ -90,12 +92,12 @@ defineExpose({ reportSaveError: (message: string) => (saveError.value = message)
         <input v-model="draftTitle" type="text" data-testid="entity-detail-edit-title" />
       </label>
       <label class="field">
-        描述（支援 Markdown：**粗體**、[文字](網址)、![說明](網址)）
-        <textarea
+        描述
+        <RichTextEditor
+          ref="descriptionEditorRef"
           v-model="draftDescription"
-          rows="6"
           data-testid="entity-detail-edit-description"
-        ></textarea>
+        />
       </label>
       <label class="field">
         狀態
@@ -147,24 +149,6 @@ defineExpose({ reportSaveError: (message: string) => (saveError.value = message)
   word-break: break-word;
 }
 
-.entity-description :deep(p) {
-  margin: 0 0 10px;
-}
-
-.entity-description :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.entity-description :deep(img) {
-  max-width: 100%;
-  border-radius: var(--radius-sm);
-  margin: 6px 0;
-}
-
-.entity-description :deep(a) {
-  color: var(--primary);
-}
-
 .field {
   display: flex;
   flex-direction: column;
@@ -176,7 +160,6 @@ defineExpose({ reportSaveError: (message: string) => (saveError.value = message)
 }
 
 .field input,
-.field textarea,
 .field select {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -186,11 +169,9 @@ defineExpose({ reportSaveError: (message: string) => (saveError.value = message)
   color: var(--text);
   outline: none;
   font-family: inherit;
-  resize: vertical;
 }
 
 .field input:focus,
-.field textarea:focus,
 .field select:focus {
   border-color: var(--primary);
   box-shadow: var(--shadow-focus);

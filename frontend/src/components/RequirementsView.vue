@@ -14,6 +14,7 @@ import type { Account, RequirementWithSpecs, Spec } from "../types";
 import EntityDetailModal from "./EntityDetailModal.vue";
 import Modal from "./Modal.vue";
 import QuickAddTask from "./QuickAddTask.vue";
+import RichTextEditor from "./RichTextEditor.vue";
 
 const props = defineProps<{ apiBaseUrl: string; currentAccount: Account }>();
 
@@ -51,6 +52,7 @@ async function load() {
 const showNewRequirement = ref(false);
 const newTitle = ref("");
 const newDescription = ref("");
+const newDescriptionEditorRef = ref<InstanceType<typeof RichTextEditor>>();
 const submitting = ref(false);
 const submitError = ref<string | null>(null);
 
@@ -71,7 +73,7 @@ async function submitNewRequirement() {
     submitError.value = "請填寫標題";
     return;
   }
-  if (!newDescription.value) {
+  if (newDescriptionEditorRef.value?.isEmpty !== false) {
     submitError.value = "請填寫描述";
     return;
   }
@@ -91,6 +93,7 @@ async function submitNewRequirement() {
 const newSpecRequirementId = ref<string | null>(null);
 const newSpecTitle = ref("");
 const newSpecDescription = ref("");
+const newSpecDescriptionEditorRef = ref<InstanceType<typeof RichTextEditor>>();
 const newSpecSubmitting = ref(false);
 const newSpecError = ref<string | null>(null);
 
@@ -112,7 +115,7 @@ async function submitNewSpec() {
     newSpecError.value = "請填寫標題";
     return;
   }
-  if (!newSpecDescription.value) {
+  if (newSpecDescriptionEditorRef.value?.isEmpty !== false) {
     newSpecError.value = "請填寫描述";
     return;
   }
@@ -211,13 +214,12 @@ defineExpose({ reload: load });
           <input v-model="newTitle" type="text" placeholder="新需求標題" data-testid="new-requirement-title" />
         </label>
         <label class="field">
-          描述（支援 Markdown：**粗體**、[文字](網址)、![說明](網址)）
-          <textarea
+          描述
+          <RichTextEditor
+            ref="newDescriptionEditorRef"
             v-model="newDescription"
-            rows="5"
-            placeholder="這個需求要做成什麼樣子？"
             data-testid="new-requirement-description"
-          ></textarea>
+          />
         </label>
         <p v-if="submitError" class="form-error" data-testid="new-requirement-error">{{ submitError }}</p>
         <div class="form-actions">
@@ -236,13 +238,12 @@ defineExpose({ reload: load });
           <input v-model="newSpecTitle" type="text" placeholder="新規格標題" data-testid="new-spec-title" />
         </label>
         <label class="field">
-          描述（支援 Markdown：**粗體**、[文字](網址)、![說明](網址)）
-          <textarea
+          描述
+          <RichTextEditor
+            ref="newSpecDescriptionEditorRef"
             v-model="newSpecDescription"
-            rows="5"
-            placeholder="這個規格的內容、位置、原型連結……"
             data-testid="new-spec-description"
-          ></textarea>
+          />
         </label>
         <p v-if="newSpecError" class="form-error" data-testid="new-spec-error">{{ newSpecError }}</p>
         <div class="form-actions">
@@ -440,8 +441,7 @@ defineExpose({ reload: load });
   margin-bottom: 14px;
 }
 
-.field input,
-.field textarea {
+.field input {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 8px 11px;
@@ -450,11 +450,9 @@ defineExpose({ reload: load });
   color: var(--text);
   outline: none;
   font-family: inherit;
-  resize: vertical;
 }
 
-.field input:focus,
-.field textarea:focus {
+.field input:focus {
   border-color: var(--primary);
   box-shadow: var(--shadow-focus);
 }

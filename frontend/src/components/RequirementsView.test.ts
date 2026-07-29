@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp as createExpressApp } from "../../../src/api/app.js";
 import { closeServer, listenOnEphemeralPort } from "../../../src/api/testHelpers.js";
 import { createTaskService, type TaskService } from "../../../src/domain/taskService.js";
-import { loginForTest, waitFor } from "../testSupport";
+import { loginForTest, setRichTextContent, waitFor } from "../testSupport";
 import type { Account } from "../types";
 import RequirementsView from "./RequirementsView.vue";
 
@@ -49,12 +49,12 @@ describe("RequirementsView - 需求/規格管理", () => {
 
     await wrapper.find('[data-testid="new-requirement-btn"]').trigger("click");
     await wrapper.find('[data-testid="new-requirement-title"]').setValue("新的需求");
-    await wrapper.find('[data-testid="new-requirement-description"]').setValue("這個需求要做什麼");
+    await setRichTextContent(wrapper, "new-requirement-description", "這個需求要做什麼");
     await wrapper.find('[data-testid="new-requirement-form"]').trigger("submit");
 
     await waitFor(() => wrapper!.text().includes("新的需求"));
     const created = service.listRequirements().find((r) => r.title === "新的需求");
-    expect(created?.description).toBe("這個需求要做什麼");
+    expect(created?.description).toContain("這個需求要做什麼");
   });
 
   it("shows an inline error when submitting without a title", async () => {
@@ -106,7 +106,17 @@ describe("RequirementsView - 需求/規格管理", () => {
   });
 
   it("opens a requirement's detail modal with its rendered description on click, and can edit it", async () => {
-    const requirement = service.createRequirement("需求A", "**重點**內容");
+    // Tiptap 原生 JSON 格式（見 CONTEXT 討論：不是使用者自己打 Markdown 語法）。
+    const boldDescription = JSON.stringify({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", marks: [{ type: "bold" }], text: "重點" }, { type: "text", text: "內容" }],
+        },
+      ],
+    });
+    const requirement = service.createRequirement("需求A", boldDescription);
 
     wrapper = mount(RequirementsView, {
       props: { apiBaseUrl: baseUrl, currentAccount },
@@ -141,8 +151,8 @@ describe("RequirementsView - 需求/規格管理", () => {
     await wrapper.find('[data-testid="entity-detail-edit-form"]').trigger("submit");
 
     await waitFor(() => service.getRequirement(requirement.id).status === "完成");
-    await waitFor(() => !wrapper!.find(`[data-testid="requirement-${requirement.id}"]`).exists());
-    expect(wrapper.find('[data-testid="completed-requirements-toggle"]').exists()).toBe(true);
+    await waitFor(() => wrapper!.find('[data-testid="completed-requirements-toggle"]').exists());
+    expect(wrapper.find(`[data-testid="requirement-${requirement.id}"]`).exists()).toBe(false);
   });
 
   // issue #51：非管理職看不到任何新增需求/規格/任務的按鈕。
