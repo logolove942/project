@@ -37,12 +37,25 @@ describe("KanbanBoard - 詳情面板：狀態下拉選單改狀態", () => {
     await waitFor(() => !wrapper!.find('[data-testid="detail-loading"]').exists());
   }
 
-  it("shows the task's four status options in the dropdown", async () => {
+  it("shows the task's five status options in the dropdown for a 管理職 viewer (issue #54)", async () => {
     const task = service.createTask(specId, {
       type: "開發任務",
       title: "任務A",
       assignees: [{ person: "小美" }],
     });
+    await mountAndSelect(task.id);
+
+    const options = wrapper!.find('[data-testid="status-select"]').findAll("option").map((o) => o.text());
+    expect(options).toEqual(["待處理", "進行中", "暫停", "完成", "已取消"]);
+  });
+
+  it("hides the 已取消 option for a 一般同仁 viewer (issue #54)", async () => {
+    const task = service.createTask(specId, {
+      type: "開發任務",
+      title: "任務A",
+      assignees: [{ person: "小美" }],
+    });
+    currentAccount = await loginForTest(baseUrl, "小美"); // 第二個註冊的帳號 -> 一般同仁
     await mountAndSelect(task.id);
 
     const options = wrapper!.find('[data-testid="status-select"]').findAll("option").map((o) => o.text());
@@ -84,6 +97,56 @@ describe("KanbanBoard - 詳情面板：狀態下拉選單改狀態", () => {
     await waitFor(() => wrapper!.find('[data-testid="status-error"]').exists());
 
     expect(wrapper!.find('[data-testid="column-待處理"]').text()).toContain("任務A");
+  });
+
+  it("cancels a task via the dropdown, moving it into 剛完成（今天） (issue #54)", async () => {
+    const task = service.createTask(specId, {
+      type: "開發任務",
+      title: "任務A",
+      assignees: [{ person: "小美" }],
+    });
+    await mountAndSelect(task.id);
+
+    await wrapper!.find('[data-testid="status-select"]').setValue("已取消");
+    await waitFor(() => !wrapper!.find('[data-testid="column-待處理"]').text().includes("任務A"));
+
+    expect(wrapper!.find('[data-testid="recently-completed"]').text()).toContain("任務A");
+  });
+
+  it("restores a cancelled task via the dropdown back to its prior status (issue #54)", async () => {
+    const task = service.createTask(specId, {
+      type: "開發任務",
+      title: "任務A",
+      assignees: [{ person: "小美" }],
+    });
+    service.startTask(task.id);
+    service.cancelTask(task.id); // 已取消不在三個常駐欄位裡，只出現在「剛完成（今天）」
+
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
+    await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
+    await wrapper.find(`[data-testid="recently-completed-card-${task.id}"]`).trigger("click");
+    await waitFor(() => !wrapper!.find('[data-testid="detail-loading"]').exists());
+
+    await wrapper.find('[data-testid="status-select"]').setValue("進行中");
+    await waitFor(() => wrapper!.find('[data-testid="column-進行中"]').text().includes("任務A"));
+  });
+
+  it("shows an error when cancelling a task that is already 完成 (issue #54)", async () => {
+    const task = service.createTask(specId, {
+      type: "開發任務",
+      title: "任務A",
+      assignees: [{ person: "小美" }],
+    });
+    service.startTask(task.id);
+    service.completeTask(task.id);
+
+    wrapper = mount(KanbanBoard, { props: { apiBaseUrl: baseUrl, currentAccount } });
+    await waitFor(() => !wrapper!.find('[data-testid="loading"]').exists());
+    await wrapper.find(`[data-testid="recently-completed-card-${task.id}"]`).trigger("click");
+    await waitFor(() => !wrapper!.find('[data-testid="detail-loading"]').exists());
+
+    await wrapper.find('[data-testid="status-select"]').setValue("已取消");
+    await waitFor(() => wrapper!.find('[data-testid="status-error"]').exists());
   });
 
   it("closes a reminder via the dropdown", async () => {

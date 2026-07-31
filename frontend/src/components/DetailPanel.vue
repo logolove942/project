@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import {
+  cancelTask,
   closeReminder,
   completeTask,
   fetchReminder,
@@ -11,6 +12,7 @@ import {
   logTaskWork,
   pauseTask,
   promoteReminderToTask,
+  restoreTask,
   resumeTask,
   startTask,
 } from "../api/client";
@@ -44,9 +46,13 @@ const hours = ref<number | null>(1);
 const note = ref("");
 const submitError = ref<string | null>(null);
 
-const statusOptions = computed(() =>
-  props.kind === "task" ? ["待處理", "進行中", "暫停", "完成"] : ["未處理", "已結案"],
-);
+// 取消/復原是管理職專屬（issue #54，ADR-0004）；非管理職的下拉不顯示「已取消」，
+// 避免顯示一個點了也只會被後端 403 的選項——後端才是真正的把關者，這裡只是不多此一舉。
+const statusOptions = computed(() => {
+  if (props.kind !== "task") return ["未處理", "已結案"];
+  const base = ["待處理", "進行中", "暫停", "完成"];
+  return props.currentAccount.role === "管理職" ? [...base, "已取消"] : base;
+});
 
 // 沒有通用的「設狀態」endpoint，只有離散的動作（start/pause/resume/complete/close）；
 // 依目前狀態決定要呼叫哪一個，呼叫不到的組合直接回報錯誤，不假裝成功。
@@ -64,6 +70,10 @@ async function onStatusChange(newStatus: string) {
         await pauseTask(props.apiBaseUrl, id);
       else if (newStatus === "待處理" && current === "暫停") await resumeTask(props.apiBaseUrl, id);
       else if (newStatus === "完成" && current === "進行中") await completeTask(props.apiBaseUrl, id);
+      else if (newStatus === "已取消" && current !== "完成") await cancelTask(props.apiBaseUrl, id);
+      // 復原永遠回到取消前的原狀態（cancelledFrom），不是使用者在下拉選了什麼——
+      // 跟既有 pause/resume 一樣，選了任何一個選項都送出同一個動作，重新載入後以真實狀態為準。
+      else if (current === "已取消") await restoreTask(props.apiBaseUrl, id);
       else throw new Error(`無法從「${current}」轉換到「${newStatus}」`);
     } else {
       if (newStatus === "已結案" && current === "未處理") await closeReminder(props.apiBaseUrl, id);

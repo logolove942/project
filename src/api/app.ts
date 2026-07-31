@@ -159,6 +159,16 @@ export function createApp(
     res.json(service.resumeTask(req.params.id));
   });
 
+  // issue #54：取消/復原是軟刪除（ADR-0004），管理職專屬——跟 start/complete/pause/resume
+  // 不同，這是任務狀態機裡唯一掛 requireManagement 的兩個轉換。
+  app.post("/tasks/:id/cancel", requireManagement, (req, res) => {
+    res.json(service.cancelTask(String(req.params.id)));
+  });
+
+  app.post("/tasks/:id/restore", requireManagement, (req, res) => {
+    res.json(service.restoreTask(String(req.params.id)));
+  });
+
   app.post("/tasks/:id/reject", (req, res) => {
     res.json(service.rejectTask(req.params.id));
   });

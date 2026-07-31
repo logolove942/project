@@ -60,6 +60,29 @@ describe("API - 任務狀態機 endpoints（含退件/重工回合）", () => {
     expect(res.status).toBe(400);
   });
 
+  it("cancels and restores a task over HTTP, returning to its prior state (ADR-0004)", async () => {
+    await fetch(`${baseUrl}/tasks/${taskId}/start`, { method: "POST" });
+    const cancelled = await fetch(`${baseUrl}/tasks/${taskId}/cancel`, { method: "POST" });
+    expect(cancelled.status).toBe(200);
+    expect((await readJson(cancelled)).status).toBe("已取消");
+
+    const restored = await fetch(`${baseUrl}/tasks/${taskId}/restore`, { method: "POST" });
+    expect(restored.status).toBe(200);
+    expect((await readJson(restored)).status).toBe("進行中");
+  });
+
+  it("400s when cancelling a task that is already 完成", async () => {
+    await fetch(`${baseUrl}/tasks/${taskId}/start`, { method: "POST" });
+    await fetch(`${baseUrl}/tasks/${taskId}/complete`, { method: "POST" });
+    const res = await fetch(`${baseUrl}/tasks/${taskId}/cancel`, { method: "POST" });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s when restoring a task that isn't cancelled", async () => {
+    const res = await fetch(`${baseUrl}/tasks/${taskId}/restore`, { method: "POST" });
+    expect(res.status).toBe(400);
+  });
+
   it("rejects a task over HTTP, creating a new rework round", async () => {
     const res = await fetch(`${baseUrl}/tasks/${taskId}/reject`, { method: "POST" });
     expect(res.status).toBe(200);
@@ -80,8 +103,8 @@ describe("API - 任務狀態機 endpoints（含退件/重工回合）", () => {
     expect(body[1].workLogs.map((w: { hours: number }) => w.hours)).toEqual([2]);
   });
 
-  it("404s for start/complete/pause/resume/reject on a non-existent task", async () => {
-    for (const action of ["start", "complete", "pause", "resume", "reject"]) {
+  it("404s for start/complete/pause/resume/reject/cancel/restore on a non-existent task", async () => {
+    for (const action of ["start", "complete", "pause", "resume", "reject", "cancel", "restore"]) {
       const res = await fetch(`${baseUrl}/tasks/missing-id/${action}`, { method: "POST" });
       expect(res.status).toBe(404);
     }

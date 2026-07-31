@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   status TEXT NOT NULL,
   paused_from TEXT,
+  cancelled_from TEXT,
   priority TEXT NOT NULL,
   due_date TEXT,
   closed_date TEXT
@@ -126,6 +127,7 @@ export function createDatabase(path: string = ":memory:"): DatabaseSync {
   db.exec(SCHEMA);
   addColumnIfMissing(db, "requirements", "description", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(db, "specs", "description", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, "tasks", "cancelled_from", "TEXT");
   return db;
 }
 

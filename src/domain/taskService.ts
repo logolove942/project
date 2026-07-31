@@ -42,6 +42,7 @@ interface TaskRow {
   title: string;
   status: string;
   paused_from: string | null;
+  cancelled_from: string | null;
   priority: string;
   due_date: string | null;
   closed_date: string | null;
@@ -121,6 +122,7 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
       assignees: getAssignees(row.id),
       status: row.status as LifecycleStatus,
       pausedFrom: toUndef(row.paused_from) as LifecycleStatus | undefined,
+      cancelledFrom: toUndef(row.cancelled_from) as LifecycleStatus | undefined,
       priority: row.priority as Priority,
       dueDate: toUndef(row.due_date),
       closedDate: toUndef(row.closed_date),
@@ -295,8 +297,8 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
     const status: LifecycleStatus = "待處理";
     const priority = params.priority ?? "中";
     db.prepare(
-      `INSERT INTO tasks (id, spec_id, type, title, status, paused_from, priority, due_date, closed_date)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
+      `INSERT INTO tasks (id, spec_id, type, title, status, paused_from, cancelled_from, priority, due_date, closed_date)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL)`,
     ).run(id, specId, params.type, params.title, status, priority, params.dueDate ?? null);
     const insertAssignee = db.prepare(
       "INSERT INTO task_assignees (task_id, person, estimated_hours) VALUES (?, ?, ?)",
@@ -382,6 +384,34 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
       throw new ValidationError(`Cannot resume a task from status: ${task.status}`);
     }
     db.prepare("UPDATE tasks SET status = ?, paused_from = NULL WHERE id = ?").run(task.pausedFrom, taskId);
+    return requireTask(taskId);
+  }
+
+  // ADR-0004：取消是軟刪除——資料不動，只是依 closed_date 套用跟「完成」一樣的下架規則
+  // （見 isClosedToday/isClosedBeforeToday）。完成是終態，不可取消。
+  function cancelTask(taskId: string): Task {
+    const task = requireTask(taskId);
+    if (task.status !== "待處理" && task.status !== "進行中" && task.status !== "暫停") {
+      throw new ValidationError(`Cannot cancel a task from status: ${task.status}`);
+    }
+    db.prepare("UPDATE tasks SET cancelled_from = ?, status = ?, closed_date = ? WHERE id = ?").run(
+      task.status,
+      "已取消",
+      today(),
+      taskId,
+    );
+    return requireTask(taskId);
+  }
+
+  function restoreTask(taskId: string): Task {
+    const task = requireTask(taskId);
+    if (task.status !== "已取消" || task.cancelledFrom === undefined) {
+      throw new ValidationError(`Cannot restore a task from status: ${task.status}`);
+    }
+    db.prepare("UPDATE tasks SET status = ?, cancelled_from = NULL, closed_date = NULL WHERE id = ?").run(
+      task.cancelledFrom,
+      taskId,
+    );
     return requireTask(taskId);
   }
 
@@ -648,14 +678,18 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
 
   // ADR-0002：完成/結案的項目不是看板常駐欄位——只有今天結案的才短暫可見，
   // 隔天起從活躍清單與「今日剛完成」查詢中都消失，只留在工時統計裡可查。
-  function isClosedToday(item: TodoItem): boolean {
+  // 已取消比照同一套規則（ADR-0004）：跟完成/已結案一樣算「已下架」的終態。
+  function isClosedStatus(item: TodoItem): boolean {
     const closedStatus = item.kind === "task" ? "完成" : "已結案";
-    return item.status === closedStatus && item.closedDate === today();
+    return item.status === closedStatus || item.status === "已取消";
+  }
+
+  function isClosedToday(item: TodoItem): boolean {
+    return isClosedStatus(item) && item.closedDate === today();
   }
 
   function isClosedBeforeToday(item: TodoItem): boolean {
-    const closedStatus = item.kind === "task" ? "完成" : "已結案";
-    return item.status === closedStatus && item.closedDate !== today();
+    return isClosedStatus(item) && item.closedDate !== today();
   }
 
   function getActiveTodoList(): TodoItem[] {
@@ -768,6 +802,8 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
     completeTask,
     pauseTask,
     resumeTask,
+    cancelTask,
+    restoreTask,
     createReminder,
     isChore,
     closeReminder,

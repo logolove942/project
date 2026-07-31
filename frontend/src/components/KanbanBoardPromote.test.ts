@@ -70,11 +70,11 @@ describe("KanbanBoard - 詳情面板：提醒升級為正式任務", () => {
 
     await waitFor(() => {
       const select = wrapper!.find('[data-testid="status-select"]');
-      return select.exists() && select.findAll("option").length === 4;
+      return select.exists() && select.findAll("option").length === 5;
     });
 
     const options = wrapper!.find('[data-testid="status-select"]').findAll("option").map((o) => o.text());
-    expect(options).toEqual(["待處理", "進行中", "暫停", "完成"]);
+    expect(options).toEqual(["待處理", "進行中", "暫停", "完成", "已取消"]);
   });
 
   it("removes the original reminder card from the board after promotion", async () => {

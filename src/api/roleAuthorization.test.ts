@@ -110,6 +110,57 @@ describe("API - 角色授權：管理職專屬操作（issue #47）", () => {
     expect(res.status).toBe(403);
   });
 
+  it("403s a 一般同仁 cancelling a task (issue #54)", async () => {
+    const task = await readJson(
+      await fetch(
+        `${baseUrl}/specs/${specId}/tasks`,
+        authed(adminToken, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "開發任務", title: "開發", assignees: [{ person: "小美" }] }),
+        }),
+      ),
+    );
+
+    const res = await fetch(`${baseUrl}/tasks/${task.id}/cancel`, authed(memberToken, { method: "POST" }));
+    expect(res.status).toBe(403);
+  });
+
+  it("403s a 一般同仁 restoring a cancelled task (issue #54)", async () => {
+    const task = await readJson(
+      await fetch(
+        `${baseUrl}/specs/${specId}/tasks`,
+        authed(adminToken, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "開發任務", title: "開發", assignees: [{ person: "小美" }] }),
+        }),
+      ),
+    );
+    await fetch(`${baseUrl}/tasks/${task.id}/cancel`, authed(adminToken, { method: "POST" }));
+
+    const res = await fetch(`${baseUrl}/tasks/${task.id}/restore`, authed(memberToken, { method: "POST" }));
+    expect(res.status).toBe(403);
+  });
+
+  it("allows 管理職 to cancel and restore a task (issue #54)", async () => {
+    const task = await readJson(
+      await fetch(
+        `${baseUrl}/specs/${specId}/tasks`,
+        authed(adminToken, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "開發任務", title: "開發", assignees: [{ person: "小美" }] }),
+        }),
+      ),
+    );
+
+    const cancelRes = await fetch(`${baseUrl}/tasks/${task.id}/cancel`, authed(adminToken, { method: "POST" }));
+    expect(cancelRes.status).toBe(200);
+    const restoreRes = await fetch(`${baseUrl}/tasks/${task.id}/restore`, authed(adminToken, { method: "POST" }));
+    expect(restoreRes.status).toBe(200);
+  });
+
   it("403s a 一般同仁 promoting another account", async () => {
     const res = await fetch(`${baseUrl}/accounts/${memberAccountId}/promote`, authed(memberToken, { method: "POST" }));
     expect(res.status).toBe(403);

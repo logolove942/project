@@ -120,6 +120,8 @@ export const startTask = (baseUrl: string, taskId: string) => postTaskAction(bas
 export const pauseTask = (baseUrl: string, taskId: string) => postTaskAction(baseUrl, taskId, "pause", "暫停任務");
 export const resumeTask = (baseUrl: string, taskId: string) => postTaskAction(baseUrl, taskId, "resume", "解除暫停");
 export const completeTask = (baseUrl: string, taskId: string) => postTaskAction(baseUrl, taskId, "complete", "完成任務");
+export const cancelTask = (baseUrl: string, taskId: string) => postTaskAction(baseUrl, taskId, "cancel", "取消任務");
+export const restoreTask = (baseUrl: string, taskId: string) => postTaskAction(baseUrl, taskId, "restore", "復原任務");
 
 export async function fetchTask(baseUrl: string, taskId: string): Promise<Task> {
   const res = await authedFetch(`${baseUrl}/tasks/${taskId}`);

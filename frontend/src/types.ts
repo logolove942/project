@@ -2,7 +2,7 @@
 // frontend has no runtime dependency on the backend source tree).
 
 export type Priority = "高" | "中" | "低";
-export type TaskStatus = "待處理" | "進行中" | "暫停" | "完成";
+export type TaskStatus = "待處理" | "進行中" | "暫停" | "完成" | "已取消";
 export type ReminderStatus = "未處理" | "已結案";
 
 export interface TodoItem {
@@ -46,6 +46,7 @@ export interface Task {
   assignees: TaskAssignee[];
   status: TaskStatus;
   pausedFrom?: TaskStatus;
+  cancelledFrom?: TaskStatus;
   priority: Priority;
   dueDate?: string;
   closedDate?: string;

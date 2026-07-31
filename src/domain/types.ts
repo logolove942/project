@@ -5,10 +5,10 @@ export type TaskType = "開發任務" | "測試任務";
 // 混合排序用：優先級為先，同優先級依到期日排序。
 export type Priority = "高" | "中" | "低";
 
-// 待處理／進行中／暫停／完成，需求、規格、任務三層共用同一組狀態字面值。
-// 任務的狀態轉換受狀態機驗證（見 taskService 的 start/complete/pause/resume）；
-// 規格、需求的狀態則由管理職手動設定，系統不驗證、不與底下任務連動。
-export type LifecycleStatus = "待處理" | "進行中" | "暫停" | "完成";
+// 待處理／進行中／暫停／完成／已取消，需求、規格、任務三層共用同一組狀態字面值。
+// 任務的狀態轉換受狀態機驗證（見 taskService 的 start/complete/pause/resume/cancelTask/restoreTask）；
+// 規格、需求的狀態則由管理職手動設定，系統不驗證、不與底下任務連動（含已取消/復原）。
+export type LifecycleStatus = "待處理" | "進行中" | "暫停" | "完成" | "已取消";
 
 // description 是必填的 Markdown 純文字（見 docs/adr 討論）：描述需求/規格在做什麼，
 // 可能包含連結、圖片（`[文字](網址)`、`![說明](網址)`）；渲染由前端 markdown.ts 自己刻，
@@ -43,9 +43,11 @@ export interface Task {
   status: LifecycleStatus;
   // 只有 status 為「暫停」時才有值，記錄暫停前的狀態，供解除暫停時還原。
   pausedFrom?: LifecycleStatus;
+  // 只有 status 為「已取消」時才有值，記錄取消前的狀態，供復原時還原（見 ADR-0004）。
+  cancelledFrom?: LifecycleStatus;
   priority: Priority;
   dueDate?: string;
-  // 只有 status 為「完成」時才有值；用來判斷是否還在「今天剛完成」的範圍內（ADR-0002）。
+  // 只有 status 為「完成」或「已取消」時才有值；用來判斷是否還在「今天剛完成/取消」的範圍內（ADR-0002）。
   closedDate?: string;
 }
 

@@ -422,6 +422,63 @@ describe("taskService - 任務狀態機（待處理/進行中/暫停/完成）",
   });
 });
 
+describe("taskService - 任務取消/復原（ADR-0004）", () => {
+  let service: TaskService;
+  let taskId: string;
+
+  beforeEach(() => {
+    service = createTaskService();
+    const requirement = service.createRequirement("報表匯出", "測試描述");
+    const spec = service.createSpec(requirement.id, "報表匯出規格", "測試描述");
+    const task = service.createTask(spec.id, {
+      type: "開發任務",
+      title: "報表匯出開發",
+      assignees: [{ person: "小美" }],
+    });
+    taskId = task.id;
+  });
+
+  it("cancels from 待處理 and restores back to 待處理", () => {
+    const cancelled = service.cancelTask(taskId);
+    expect(cancelled.status).toBe("已取消");
+    expect(cancelled.cancelledFrom).toBe("待處理");
+    const restored = service.restoreTask(taskId);
+    expect(restored.status).toBe("待處理");
+    expect(restored.cancelledFrom).toBeUndefined();
+  });
+
+  it("cancels from 進行中 and restores back to 進行中", () => {
+    service.startTask(taskId);
+    service.cancelTask(taskId);
+    const restored = service.restoreTask(taskId);
+    expect(restored.status).toBe("進行中");
+  });
+
+  it("cancels from 暫停 and restores back to 暫停", () => {
+    service.pauseTask(taskId);
+    const cancelled = service.cancelTask(taskId);
+    expect(cancelled.status).toBe("已取消");
+    expect(cancelled.cancelledFrom).toBe("暫停");
+    const restored = service.restoreTask(taskId);
+    expect(restored.status).toBe("暫停");
+  });
+
+  it("rejects cancelling a task that is already 完成", () => {
+    service.startTask(taskId);
+    service.completeTask(taskId);
+    expect(() => service.cancelTask(taskId)).toThrowError(ValidationError);
+  });
+
+  it("rejects restoring a task that is not currently 已取消", () => {
+    expect(() => service.restoreTask(taskId)).toThrowError(ValidationError);
+  });
+
+  it("throws for cancel/restore on a non-existent task", () => {
+    expect(() => service.cancelTask("missing-task")).toThrowError(NotFoundError);
+    expect(() => service.restoreTask("missing-task")).toThrowError(NotFoundError);
+  });
+});
+
 describe("taskService - 規格/需求獨立狀態欄位", () => {
   let service: TaskService;
   let requirementId: string;
@@ -1079,6 +1136,23 @@ describe("taskService - 完成項目下架看板查詢（ADR-0002）", () => {
     });
 
     expect(service.getRecentlyCompletedTodoList().map((i) => i.id)).not.toContain(reminder.id);
+  });
+
+  it("applies the same drop-off rule to a cancelled task (ADR-0004)", () => {
+    const task = service.createTask(specId, {
+      type: "開發任務",
+      title: "任務",
+      assignees: [{ person: "小美" }],
+    });
+    service.cancelTask(task.id);
+
+    expect(service.getActiveTodoList().map((i) => i.id)).toContain(task.id);
+    expect(service.getRecentlyCompletedTodoList().map((i) => i.id)).toContain(task.id);
+
+    vi.setSystemTime(new Date("2026-07-28T10:00:00Z"));
+
+    expect(service.getActiveTodoList().map((i) => i.id)).not.toContain(task.id);
+    expect(service.getRecentlyCompletedTodoList().map((i) => i.id)).not.toContain(task.id);
   });
 });
 
