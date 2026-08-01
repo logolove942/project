@@ -143,6 +143,13 @@ export function createApp(
     res.json(service.getTask(req.params.id));
   });
 
+  // issue #55：任務編輯（標題/優先度/到期日/指派對象/所屬規格/類型）管理職專屬，
+  // 跟建立任務(POST /specs/:id/tasks)一樣掛 requireManagement，不像需求/規格編輯開放給任何登入帳號。
+  app.patch("/tasks/:id", requireManagement, (req, res) => {
+    const { title, priority, dueDate, assignees, specId, type } = req.body;
+    res.json(service.updateTask(String(req.params.id), { title, priority, dueDate, assignees, specId, type }));
+  });
+
   app.post("/tasks/:id/start", (req, res) => {
     res.json(service.startTask(req.params.id));
   });

@@ -355,6 +355,7 @@ defineExpose({ reload: load });
           :item-id="selectedItem.id"
           :kind="selectedItem.kind"
           :accounts="accountOptions"
+          :specs="specOptions"
           :current-account="currentAccount"
           @close="selectedItem = null"
           @changed="load"

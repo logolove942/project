@@ -479,6 +479,93 @@ describe("taskService - 任務取消/復原（ADR-0004）", () => {
   });
 });
 
+describe("taskService - 任務編輯（issue #55）", () => {
+  let service: TaskService;
+  let specId: string;
+  let otherSpecId: string;
+  let taskId: string;
+
+  beforeEach(() => {
+    service = createTaskService();
+    const requirement = service.createRequirement("報表匯出", "測試描述");
+    const spec = service.createSpec(requirement.id, "報表匯出規格", "測試描述");
+    specId = spec.id;
+    const otherSpec = service.createSpec(requirement.id, "另一個規格", "測試描述");
+    otherSpecId = otherSpec.id;
+    const task = service.createTask(specId, {
+      type: "開發任務",
+      title: "報表匯出開發",
+      assignees: [{ person: "小美" }],
+      priority: "中",
+      dueDate: "2026-08-01",
+    });
+    taskId = task.id;
+  });
+
+  it("updates each editable field independently, leaving the others untouched", () => {
+    const afterTitle = service.updateTask(taskId, { title: "新標題" });
+    expect(afterTitle.title).toBe("新標題");
+    expect(afterTitle.priority).toBe("中");
+
+    const afterPriority = service.updateTask(taskId, { priority: "高" });
+    expect(afterPriority.priority).toBe("高");
+    expect(afterPriority.title).toBe("新標題");
+
+    const afterDueDate = service.updateTask(taskId, { dueDate: "2026-09-01" });
+    expect(afterDueDate.dueDate).toBe("2026-09-01");
+
+    const afterType = service.updateTask(taskId, { type: "測試任務" });
+    expect(afterType.type).toBe("測試任務");
+
+    const afterSpec = service.updateTask(taskId, { specId: otherSpecId });
+    expect(afterSpec.specId).toBe(otherSpecId);
+    // 移動到新規格後，舊規格底下就不再列出這個任務
+    expect(service.getSpecWithTasks(specId).tasks.map((t) => t.id)).not.toContain(taskId);
+    expect(service.getSpecWithTasks(otherSpecId).tasks.map((t) => t.id)).toContain(taskId);
+  });
+
+  it("updates multiple fields together in a single call", () => {
+    const updated = service.updateTask(taskId, {
+      title: "合併更新",
+      priority: "低",
+      dueDate: "2026-10-01",
+    });
+    expect(updated.title).toBe("合併更新");
+    expect(updated.priority).toBe("低");
+    expect(updated.dueDate).toBe("2026-10-01");
+  });
+
+  it("replaces the assignee list wholesale, adding and removing people", () => {
+    const updated = service.updateTask(taskId, {
+      assignees: [{ person: "阿凱" }, { person: "小美", estimatedHours: 5 }],
+    });
+    expect(updated.assignees).toEqual(
+      expect.arrayContaining([{ person: "阿凱" }, { person: "小美", estimatedHours: 5 }]),
+    );
+  });
+
+  it("keeps a removed assignee's existing work logs intact and queryable", () => {
+    service.logWork(taskId, { person: "小美", date: "2026-07-24", hours: 6, note: "已完成的部分" });
+    service.updateTask(taskId, { assignees: [{ person: "阿凱" }] });
+
+    const logs = service.getWorkLogs(taskId);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ person: "小美", hours: 6, note: "已完成的部分" });
+  });
+
+  it("rejects clearing all assignees", () => {
+    expect(() => service.updateTask(taskId, { assignees: [] })).toThrowError(ValidationError);
+  });
+
+  it("throws when moving a task into a non-existent spec", () => {
+    expect(() => service.updateTask(taskId, { specId: "missing-spec" })).toThrowError(NotFoundError);
+  });
+
+  it("throws when editing a non-existent task", () => {
+    expect(() => service.updateTask("missing-task", { title: "x" })).toThrowError(NotFoundError);
+  });
+});
+
 describe("taskService - 規格/需求獨立狀態欄位", () => {
   let service: TaskService;
   let requirementId: string;

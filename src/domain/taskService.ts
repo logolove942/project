@@ -415,6 +415,53 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
     return requireTask(taskId);
   }
 
+  // issue #55：管理職編輯任務標題/優先度/到期日/指派對象/所屬規格/類型，不需取消重建；
+  // 未帶到的欄位維持原值（仿 updateRequirement/updateSpec 的部分更新寫法）。
+  // 傳入 assignees 會整批取代現有指派名單，但只動 task_assignees 這張表——
+  // work_logs 以 person 字串獨立記錄，不受影響，移除的指派對象既有報工原封不動保留。
+  function updateTask(
+    taskId: string,
+    params: {
+      title?: string;
+      priority?: Priority;
+      dueDate?: string;
+      assignees?: TaskAssignee[];
+      specId?: string;
+      type?: TaskType;
+    },
+  ): Task {
+    const current = requireTask(taskId);
+    if (params.specId !== undefined) requireSpec(params.specId);
+    if (params.assignees !== undefined && params.assignees.length === 0) {
+      throw new ValidationError("A task needs at least one assignee");
+    }
+    const title = params.title ?? current.title;
+    const priority = params.priority ?? current.priority;
+    const dueDate = params.dueDate ?? current.dueDate;
+    const specId = params.specId ?? current.specId;
+    const type = params.type ?? current.type;
+    db.prepare("UPDATE tasks SET title = ?, priority = ?, due_date = ?, spec_id = ?, type = ? WHERE id = ?").run(
+      title,
+      priority,
+      dueDate ?? null,
+      specId,
+      type,
+      taskId,
+    );
+
+    if (params.assignees !== undefined) {
+      db.prepare("DELETE FROM task_assignees WHERE task_id = ?").run(taskId);
+      const insertAssignee = db.prepare(
+        "INSERT INTO task_assignees (task_id, person, estimated_hours) VALUES (?, ?, ?)",
+      );
+      for (const assignee of params.assignees) {
+        insertAssignee.run(taskId, assignee.person, assignee.estimatedHours ?? null);
+      }
+    }
+
+    return requireTask(taskId);
+  }
+
   function getSpecWithTasks(specId: string): SpecWithTasks {
     const spec = requireSpec(specId);
     const rows = db
@@ -784,6 +831,7 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
     updateRequirement,
     updateSpec,
     createTask,
+    updateTask,
     setSpecStatus,
     setRequirementStatus,
     getSpecWithTasks,

@@ -161,6 +161,53 @@ describe("API - 角色授權：管理職專屬操作（issue #47）", () => {
     expect(restoreRes.status).toBe(200);
   });
 
+  it("403s a 一般同仁 editing a task (issue #55)", async () => {
+    const task = await readJson(
+      await fetch(
+        `${baseUrl}/specs/${specId}/tasks`,
+        authed(adminToken, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "開發任務", title: "開發", assignees: [{ person: "小美" }] }),
+        }),
+      ),
+    );
+
+    const res = await fetch(
+      `${baseUrl}/tasks/${task.id}`,
+      authed(memberToken, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "新標題" }),
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("allows 管理職 to edit a task (issue #55)", async () => {
+    const task = await readJson(
+      await fetch(
+        `${baseUrl}/specs/${specId}/tasks`,
+        authed(adminToken, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "開發任務", title: "開發", assignees: [{ person: "小美" }] }),
+        }),
+      ),
+    );
+
+    const res = await fetch(
+      `${baseUrl}/tasks/${task.id}`,
+      authed(adminToken, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "新標題" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect((await readJson(res)).title).toBe("新標題");
+  });
+
   it("403s a 一般同仁 promoting another account", async () => {
     const res = await fetch(`${baseUrl}/accounts/${memberAccountId}/promote`, authed(memberToken, { method: "POST" }));
     expect(res.status).toBe(403);

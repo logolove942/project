@@ -267,6 +267,24 @@ export async function updateSpec(baseUrl: string, id: string, edit: EntityEdit):
   return (await readJsonOrThrow(res, "編輯規格")) as Spec;
 }
 
+export interface TaskEdit {
+  title?: string;
+  priority?: "高" | "中" | "低";
+  dueDate?: string;
+  assignees?: TaskAssignee[];
+  specId?: string;
+  type?: "開發任務" | "測試任務";
+}
+
+export async function updateTask(baseUrl: string, id: string, edit: TaskEdit): Promise<Task> {
+  const res = await authedFetch(`${baseUrl}/tasks/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(edit),
+  });
+  return (await readJsonOrThrow(res, "編輯任務")) as Task;
+}
+
 export interface NewTaskInput {
   type: "開發任務" | "測試任務";
   title: string;
