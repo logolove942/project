@@ -80,8 +80,9 @@ export interface WorkLogEntry {
   note?: string;
 }
 
-// 提醒只有兩態；報工不影響狀態機（見 CONTEXT.md「提醒狀態」）。
-export type ReminderStatus = "未處理" | "已結案";
+// 提醒三態；報工不影響狀態機（見 CONTEXT.md「提醒狀態」）。已取消／已結案語意不同
+// （決定不處理了／處理完了），但兩者對看板下架規則一視同仁（issue #57，ADR-0004）。
+export type ReminderStatus = "未處理" | "已取消" | "已結案";
 
 // 自建給自己、且未掛勾規格的提醒＝個人雜事，不是獨立實體（見 isChore()）。
 export interface Reminder {
@@ -93,7 +94,7 @@ export interface Reminder {
   status: ReminderStatus;
   priority: Priority;
   dueDate?: string;
-  // 只有 status 為「已結案」時才有值；用來判斷是否還在「今天剛結案」的範圍內（ADR-0002）。
+  // 只有 status 為「已取消」或「已結案」時才有值；用來判斷是否還在「今天剛取消/結案」的範圍內（ADR-0002）。
   closedDate?: string;
 }
 

@@ -555,6 +555,27 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
     return requireReminder(id);
   }
 
+  // issue #58：createdBy 或 assignedTo（見 app.ts 的 requireReminderOwner）可編輯提醒，
+  // 未帶到的欄位維持原值（仿 updateRequirement/updateSpec 的部分更新寫法）。
+  // isChore() 是每次即時依 createdBy/assignedTo/specId 現值計算，不是建立時快取的旗標，
+  // 所以改了 assignedTo 之後雜事/一般提醒的判斷會自動反映，不需要額外程式碼。
+  function updateReminder(
+    reminderId: string,
+    params: { title?: string; priority?: Priority; dueDate?: string; assignedTo?: string; specId?: string },
+  ): Reminder {
+    const current = requireReminder(reminderId);
+    if (params.specId !== undefined) requireSpec(params.specId);
+    const title = params.title ?? current.title;
+    const priority = params.priority ?? current.priority;
+    const dueDate = params.dueDate ?? current.dueDate;
+    const assignedTo = params.assignedTo ?? current.assignedTo;
+    const specId = params.specId ?? current.specId;
+    db.prepare(
+      "UPDATE reminders SET title = ?, priority = ?, due_date = ?, assigned_to = ?, spec_id = ? WHERE id = ?",
+    ).run(title, priority, dueDate ?? null, assignedTo, specId ?? null, reminderId);
+    return requireReminder(reminderId);
+  }
+
   // 自建給自己、且未掛勾規格的提醒＝個人雜事；不是獨立實體，只是這個情境的判斷。
   function isChore(reminder: Reminder): boolean {
     return reminder.createdBy === reminder.assignedTo && reminder.specId === undefined;
@@ -570,6 +591,30 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
       today(),
       reminderId,
     );
+    return requireReminder(reminderId);
+  }
+
+  // issue #57：取消跟結案語意不同（決定不處理了／處理完了），但下架規則一視同仁（ADR-0004）——
+  // 只能從未處理轉入，跟 closeReminder 互斥（已結案不能再取消，反之亦然）。
+  function cancelReminder(reminderId: string): Reminder {
+    const reminder = requireReminder(reminderId);
+    if (reminder.status !== "未處理") {
+      throw new ValidationError(`Cannot cancel a reminder from status: ${reminder.status}`);
+    }
+    db.prepare("UPDATE reminders SET status = ?, closed_date = ? WHERE id = ?").run(
+      "已取消",
+      today(),
+      reminderId,
+    );
+    return requireReminder(reminderId);
+  }
+
+  function restoreReminder(reminderId: string): Reminder {
+    const reminder = requireReminder(reminderId);
+    if (reminder.status !== "已取消") {
+      throw new ValidationError(`Cannot restore a reminder from status: ${reminder.status}`);
+    }
+    db.prepare("UPDATE reminders SET status = ?, closed_date = NULL WHERE id = ?").run("未處理", reminderId);
     return requireReminder(reminderId);
   }
 
@@ -853,8 +898,11 @@ export function createTaskService(db: DatabaseSync = createDatabase()) {
     cancelTask,
     restoreTask,
     createReminder,
+    updateReminder,
     isChore,
     closeReminder,
+    cancelReminder,
+    restoreReminder,
     logReminderWork,
     getReminderWorkLogs,
     listRemindersVisibleTo,

@@ -1241,6 +1241,143 @@ describe("taskService - 完成項目下架看板查詢（ADR-0002）", () => {
     expect(service.getActiveTodoList().map((i) => i.id)).not.toContain(task.id);
     expect(service.getRecentlyCompletedTodoList().map((i) => i.id)).not.toContain(task.id);
   });
+
+  it("applies the same drop-off rule to a cancelled reminder (issue #57)", () => {
+    const reminder = service.createReminder({ createdBy: "我", assignedTo: "我", title: "提醒" });
+    service.cancelReminder(reminder.id);
+
+    expect(service.getActiveTodoList().map((i) => i.id)).toContain(reminder.id);
+    expect(service.getRecentlyCompletedTodoList().map((i) => i.id)).toContain(reminder.id);
+
+    vi.setSystemTime(new Date("2026-07-28T10:00:00Z"));
+
+    expect(service.getActiveTodoList().map((i) => i.id)).not.toContain(reminder.id);
+    expect(service.getRecentlyCompletedTodoList().map((i) => i.id)).not.toContain(reminder.id);
+  });
+});
+
+describe("taskService - 提醒取消/復原（issue #57）", () => {
+  let service: TaskService;
+  let reminderId: string;
+
+  beforeEach(() => {
+    service = createTaskService();
+    const reminder = service.createReminder({ createdBy: "小美", assignedTo: "阿凱", title: "提醒A" });
+    reminderId = reminder.id;
+  });
+
+  it("cancels from 未處理 and restores back to 未處理", () => {
+    const cancelled = service.cancelReminder(reminderId);
+    expect(cancelled.status).toBe("已取消");
+    expect(cancelled.closedDate).toBeTruthy();
+    const restored = service.restoreReminder(reminderId);
+    expect(restored.status).toBe("未處理");
+    expect(restored.closedDate).toBeUndefined();
+  });
+
+  it("rejects cancelling a reminder that is already 已結案", () => {
+    service.closeReminder(reminderId);
+    expect(() => service.cancelReminder(reminderId)).toThrowError(ValidationError);
+  });
+
+  it("rejects cancelling an already-cancelled reminder", () => {
+    service.cancelReminder(reminderId);
+    expect(() => service.cancelReminder(reminderId)).toThrowError(ValidationError);
+  });
+
+  it("rejects restoring a reminder that is not currently 已取消", () => {
+    expect(() => service.restoreReminder(reminderId)).toThrowError(ValidationError);
+  });
+
+  it("rejects restoring an already-closed reminder", () => {
+    service.closeReminder(reminderId);
+    expect(() => service.restoreReminder(reminderId)).toThrowError(ValidationError);
+  });
+
+  it("throws for cancel/restore on a non-existent reminder", () => {
+    expect(() => service.cancelReminder("missing-reminder")).toThrowError(NotFoundError);
+    expect(() => service.restoreReminder("missing-reminder")).toThrowError(NotFoundError);
+  });
+});
+
+describe("taskService - 提醒編輯（issue #58）", () => {
+  let service: TaskService;
+  let specId: string;
+  let otherSpecId: string;
+  let reminderId: string;
+
+  beforeEach(() => {
+    service = createTaskService();
+    const requirement = service.createRequirement("R", "測試描述");
+    const spec = service.createSpec(requirement.id, "S", "測試描述");
+    specId = spec.id;
+    const otherSpec = service.createSpec(requirement.id, "另一個規格", "測試描述");
+    otherSpecId = otherSpec.id;
+    const reminder = service.createReminder({
+      createdBy: "小美",
+      assignedTo: "阿凱",
+      title: "提醒A",
+      priority: "中",
+      dueDate: "2026-08-01",
+    });
+    reminderId = reminder.id;
+  });
+
+  it("updates each editable field independently, leaving the others untouched", () => {
+    const afterTitle = service.updateReminder(reminderId, { title: "新標題" });
+    expect(afterTitle.title).toBe("新標題");
+    expect(afterTitle.priority).toBe("中");
+
+    const afterPriority = service.updateReminder(reminderId, { priority: "高" });
+    expect(afterPriority.priority).toBe("高");
+    expect(afterPriority.title).toBe("新標題");
+
+    const afterDueDate = service.updateReminder(reminderId, { dueDate: "2026-09-01" });
+    expect(afterDueDate.dueDate).toBe("2026-09-01");
+
+    const afterAssignee = service.updateReminder(reminderId, { assignedTo: "小美" });
+    expect(afterAssignee.assignedTo).toBe("小美");
+
+    const afterSpec = service.updateReminder(reminderId, { specId });
+    expect(afterSpec.specId).toBe(specId);
+  });
+
+  it("updates multiple fields together in a single call", () => {
+    const updated = service.updateReminder(reminderId, {
+      title: "合併更新",
+      priority: "低",
+      dueDate: "2026-10-01",
+      specId: otherSpecId,
+    });
+    expect(updated.title).toBe("合併更新");
+    expect(updated.priority).toBe("低");
+    expect(updated.dueDate).toBe("2026-10-01");
+    expect(updated.specId).toBe(otherSpecId);
+  });
+
+  it("demotes a reminder from 一般提醒 to 個人雜事 when assignedTo changes to match createdBy, with no spec", () => {
+    const reminder = service.createReminder({ createdBy: "我", assignedTo: "小美", title: "幫忙看一下" });
+    expect(service.isChore(reminder)).toBe(false);
+
+    const updated = service.updateReminder(reminder.id, { assignedTo: "我" });
+    expect(service.isChore(updated)).toBe(true);
+  });
+
+  it("promotes a reminder from 個人雜事 to 一般提醒 when assignedTo changes to someone else", () => {
+    const chore = service.createReminder({ createdBy: "我", assignedTo: "我", title: "設定新同仁帳號權限" });
+    expect(service.isChore(chore)).toBe(true);
+
+    const updated = service.updateReminder(chore.id, { assignedTo: "小美" });
+    expect(service.isChore(updated)).toBe(false);
+  });
+
+  it("throws when moving a reminder into a non-existent spec", () => {
+    expect(() => service.updateReminder(reminderId, { specId: "missing-spec" })).toThrowError(NotFoundError);
+  });
+
+  it("throws when editing a non-existent reminder", () => {
+    expect(() => service.updateReminder("missing-reminder", { title: "x" })).toThrowError(NotFoundError);
+  });
 });
 
 describe("taskService - 月度與季度/半年工時統計聚合", () => {

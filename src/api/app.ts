@@ -197,6 +197,19 @@ export function createApp(
     res.json(service.getTaskEstimateVsActual(req.params.id));
   });
 
+  // issue #57：取消/復原/編輯（#58）只開放給提醒的建立者或提醒對象，不像 requireManagement
+  // 檢查角色——這裡要先把提醒讀出來才知道 createdBy/assignedTo 是誰，所以定義在 createApp
+  // 內部，閉包捕捉 service（跟 requireManagement 不同，後者只需要 req.account.role）。
+  function requireReminderOwner(req: Request, res: Response, next: NextFunction) {
+    const reminder = service.getReminder(String(req.params.id));
+    const accountName = (req as AuthedRequest).account.name;
+    if (accountName !== reminder.createdBy && accountName !== reminder.assignedTo) {
+      res.status(403).json({ error: "權限不足：僅提醒建立者或提醒對象可以執行此操作" });
+      return;
+    }
+    next();
+  }
+
   app.post("/reminders", (req, res) => {
     const { createdBy, assignedTo, title, specId, priority, dueDate } = req.body;
     res.status(201).json(service.createReminder({ createdBy, assignedTo, title, specId, priority, dueDate }));
@@ -206,8 +219,23 @@ export function createApp(
     res.json(service.getReminder(req.params.id));
   });
 
+  // issue #58：標題/優先度/到期日/提醒對象/關聯規格編輯，跟 #57 的取消/復原共用同一個
+  // requireReminderOwner 中介層。
+  app.patch("/reminders/:id", requireReminderOwner, (req, res) => {
+    const { title, priority, dueDate, assignedTo, specId } = req.body;
+    res.json(service.updateReminder(String(req.params.id), { title, priority, dueDate, assignedTo, specId }));
+  });
+
   app.post("/reminders/:id/close", (req, res) => {
     res.json(service.closeReminder(req.params.id));
+  });
+
+  app.post("/reminders/:id/cancel", requireReminderOwner, (req, res) => {
+    res.json(service.cancelReminder(String(req.params.id)));
+  });
+
+  app.post("/reminders/:id/restore", requireReminderOwner, (req, res) => {
+    res.json(service.restoreReminder(String(req.params.id)));
   });
 
   app.post("/reminders/:id/work-logs", (req, res) => {

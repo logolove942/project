@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import {
+  cancelReminder,
   cancelTask,
   closeReminder,
   completeTask,
@@ -12,9 +13,11 @@ import {
   logTaskWork,
   pauseTask,
   promoteReminderToTask,
+  restoreReminder,
   restoreTask,
   resumeTask,
   startTask,
+  updateReminder,
   updateTask,
 } from "../api/client";
 import { avatarColor, initials } from "../avatarUtils";
@@ -159,6 +162,88 @@ async function submitEditTask() {
   }
 }
 
+// 提醒的取消/復原/編輯只開放給建立者或提醒對象（issue #57/#58，後端 requireReminderOwner
+// 把關）；不是管理職專屬，跟任務的取消/編輯權限模型不同。
+const canManageReminder = computed(() => {
+  if (props.kind !== "reminder" || !detail.value) return false;
+  const reminder = detail.value as Reminder;
+  return reminder.createdBy === props.currentAccount.name || reminder.assignedTo === props.currentAccount.name;
+});
+
+const reminderActionError = ref<string | null>(null);
+
+async function onCancelReminder() {
+  reminderActionError.value = null;
+  try {
+    await cancelReminder(props.apiBaseUrl, props.itemId);
+    await load();
+    emit("changed");
+  } catch (e) {
+    reminderActionError.value = e instanceof Error ? e.message : "取消提醒失敗";
+  }
+}
+
+async function onRestoreReminder() {
+  reminderActionError.value = null;
+  try {
+    await restoreReminder(props.apiBaseUrl, props.itemId);
+    await load();
+    emit("changed");
+  } catch (e) {
+    reminderActionError.value = e instanceof Error ? e.message : "復原提醒失敗";
+  }
+}
+
+const editingReminder = ref(false);
+const editReminderTitle = ref("");
+const editReminderAssignedTo = ref("");
+const editReminderSpecId = ref("");
+const editReminderPriority = ref<Priority>("中");
+const editReminderDueDate = ref("");
+const editReminderError = ref<string | null>(null);
+const editReminderSaving = ref(false);
+
+function startEditReminder() {
+  const reminder = detail.value as Reminder;
+  editReminderTitle.value = reminder.title;
+  editReminderAssignedTo.value = reminder.assignedTo;
+  editReminderSpecId.value = reminder.specId ?? "";
+  editReminderPriority.value = reminder.priority;
+  editReminderDueDate.value = reminder.dueDate ?? "";
+  editReminderError.value = null;
+  editingReminder.value = true;
+}
+
+function cancelEditReminder() {
+  editingReminder.value = false;
+  editReminderError.value = null;
+}
+
+async function submitEditReminder() {
+  editReminderError.value = null;
+  if (!editReminderTitle.value || !editReminderAssignedTo.value) {
+    editReminderError.value = "請填寫標題與對象";
+    return;
+  }
+  editReminderSaving.value = true;
+  try {
+    await updateReminder(props.apiBaseUrl, props.itemId, {
+      title: editReminderTitle.value,
+      assignedTo: editReminderAssignedTo.value,
+      specId: editReminderSpecId.value || undefined,
+      priority: editReminderPriority.value,
+      dueDate: editReminderDueDate.value || undefined,
+    });
+    editingReminder.value = false;
+    await load();
+    emit("changed");
+  } catch (e) {
+    editReminderError.value = e instanceof Error ? e.message : "編輯提醒失敗";
+  } finally {
+    editReminderSaving.value = false;
+  }
+}
+
 // 只有第一次載入（或切換到不同項目）顯示滿版載入中；報工/改狀態後的
 // 重新整理靜靜更新資料，面板不會因為每次動作而整個消失又出現。
 const hasLoadedOnce = ref(false);
@@ -260,6 +345,7 @@ defineExpose({ reload: load });
 
       <h3>狀態</h3>
       <select
+        v-if="kind !== 'reminder' || detail.status !== '已取消'"
         class="status-select"
         :value="detail.status"
         data-testid="status-select"
@@ -267,6 +353,7 @@ defineExpose({ reload: load });
       >
         <option v-for="option in statusOptions" :key="option" :value="option">{{ option }}</option>
       </select>
+      <p v-else class="status-cancelled-label" data-testid="status-cancelled-label">已取消</p>
       <p v-if="statusError" class="inline-error" data-testid="status-error">{{ statusError }}</p>
 
       <template v-if="canEditTask">
@@ -352,6 +439,89 @@ defineExpose({ reload: load });
       </template>
 
       <template v-if="kind === 'reminder'">
+        <template v-if="canManageReminder">
+          <button
+            v-if="(detail as Reminder).status === '未處理'"
+            type="button"
+            class="btn-ghost btn-sm"
+            data-testid="reminder-cancel-btn"
+            @click="onCancelReminder"
+          >
+            取消提醒
+          </button>
+          <button
+            v-else-if="(detail as Reminder).status === '已取消'"
+            type="button"
+            class="btn-ghost btn-sm"
+            data-testid="reminder-restore-btn"
+            @click="onRestoreReminder"
+          >
+            復原提醒
+          </button>
+          <p v-if="reminderActionError" class="inline-error" data-testid="reminder-action-error">
+            {{ reminderActionError }}
+          </p>
+
+          <button
+            v-if="!editingReminder"
+            type="button"
+            class="btn-ghost btn-sm"
+            data-testid="reminder-edit-btn"
+            @click="startEditReminder"
+          >
+            編輯提醒
+          </button>
+          <form v-else class="task-edit-form" data-testid="reminder-edit-form" @submit.prevent="submitEditReminder">
+            <label class="field">
+              標題
+              <input v-model="editReminderTitle" type="text" data-testid="reminder-edit-title" />
+            </label>
+            <label class="field">
+              對象
+              <select v-model="editReminderAssignedTo" data-testid="reminder-edit-assignee">
+                <option v-for="account in accounts" :key="account.id" :value="account.name">
+                  {{ account.name }}
+                </option>
+              </select>
+            </label>
+            <label class="field">
+              關聯規格（選填）
+              <select v-model="editReminderSpecId" data-testid="reminder-edit-spec">
+                <option value="">未關聯規格</option>
+                <option v-for="spec in specs" :key="spec.id" :value="spec.id">{{ spec.label }}</option>
+              </select>
+            </label>
+            <label class="field">
+              優先級
+              <select v-model="editReminderPriority" data-testid="reminder-edit-priority">
+                <option value="高">高</option>
+                <option value="中">中</option>
+                <option value="低">低</option>
+              </select>
+            </label>
+            <label class="field">
+              到期日（選填）
+              <input v-model="editReminderDueDate" type="date" data-testid="reminder-edit-duedate" />
+            </label>
+            <p v-if="editReminderError" class="inline-error" data-testid="reminder-edit-error">
+              {{ editReminderError }}
+            </p>
+            <div class="form-actions">
+              <button type="button" class="btn-ghost" data-testid="reminder-edit-cancel" @click="cancelEditReminder">
+                取消
+              </button>
+              <button
+                type="submit"
+                class="btn-primary"
+                :disabled="editReminderSaving"
+                data-testid="reminder-edit-submit"
+              >
+                儲存
+              </button>
+            </div>
+          </form>
+        </template>
+
         <button
           v-if="!showPromoteForm"
           type="button"
@@ -464,6 +634,13 @@ defineExpose({ reload: load });
   font-size: 13px;
   background: var(--bg);
   color: var(--text);
+}
+
+.status-cancelled-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin: 0;
 }
 
 .detail-panel ul {

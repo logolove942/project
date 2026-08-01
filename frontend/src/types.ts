@@ -3,7 +3,7 @@
 
 export type Priority = "高" | "中" | "低";
 export type TaskStatus = "待處理" | "進行中" | "暫停" | "完成" | "已取消";
-export type ReminderStatus = "未處理" | "已結案";
+export type ReminderStatus = "未處理" | "已取消" | "已結案";
 
 export interface TodoItem {
   id: string;

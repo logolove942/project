@@ -87,6 +87,21 @@ describe("KanbanBoard - 「剛完成（今天）」收合區塊", () => {
     expect(wrapper!.find('[data-testid="recently-completed"]').text()).toContain("提醒A");
   });
 
+  it("shows a cancelled reminder inside the 'recently completed' section, dropping it the day after (issue #57)", async () => {
+    const reminder = service.createReminder({ createdBy: "小美", assignedTo: "阿凱", title: "提醒A" });
+    service.cancelReminder(reminder.id);
+    await mountAndWait();
+
+    expect(wrapper!.find('[data-testid="recently-completed"]').text()).toContain("提醒A");
+
+    vi.setSystemTime(new Date("2026-07-28T10:00:00Z"));
+    wrapper!.unmount();
+    await mountAndWait();
+
+    expect(wrapper!.find(`[data-testid="card-${reminder.id}"]`).exists()).toBe(false);
+    expect(wrapper!.find('[data-testid="recently-completed"]').exists()).toBe(false);
+  });
+
   it("drops the item from both the board and the 'recently completed' section the day after", async () => {
     const task = service.createTask(specId, {
       type: "開發任務",

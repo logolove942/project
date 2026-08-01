@@ -69,13 +69,13 @@ const COLUMNS = ["待處理", "進行中", "暫停"] as const;
 // 提醒的「未處理」對應「待處理」欄；完成/已結案/已取消的項目不進入任何常駐欄位（ADR-0002/ADR-0004）。
 function statusColumn(item: TodoItem): string {
   if (item.kind === "task") return item.status;
-  return item.status === "已結案" ? "完成" : "待處理";
+  return item.status === "未處理" ? "待處理" : "完成";
 }
 
 // 已取消跟完成/已結案一樣是下架終態（ADR-0004），不是三個常駐欄位之一，
 // 也不能沿用 statusColumn 判斷（任務的「已取消」不會被 statusColumn 對應成「完成」）。
 function isClosed(item: TodoItem): boolean {
-  return item.kind === "task" ? item.status === "完成" || item.status === "已取消" : item.status === "已結案";
+  return item.kind === "task" ? item.status === "完成" || item.status === "已取消" : item.status !== "未處理";
 }
 
 const columns = computed(() =>

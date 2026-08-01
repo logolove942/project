@@ -138,6 +138,33 @@ export async function closeReminder(baseUrl: string, reminderId: string): Promis
   return (await readJsonOrThrow(res, "關閉提醒")) as Reminder;
 }
 
+export async function cancelReminder(baseUrl: string, reminderId: string): Promise<Reminder> {
+  const res = await authedFetch(`${baseUrl}/reminders/${reminderId}/cancel`, { method: "POST" });
+  return (await readJsonOrThrow(res, "取消提醒")) as Reminder;
+}
+
+export async function restoreReminder(baseUrl: string, reminderId: string): Promise<Reminder> {
+  const res = await authedFetch(`${baseUrl}/reminders/${reminderId}/restore`, { method: "POST" });
+  return (await readJsonOrThrow(res, "復原提醒")) as Reminder;
+}
+
+export interface ReminderEdit {
+  title?: string;
+  priority?: "高" | "中" | "低";
+  dueDate?: string;
+  assignedTo?: string;
+  specId?: string;
+}
+
+export async function updateReminder(baseUrl: string, id: string, edit: ReminderEdit): Promise<Reminder> {
+  const res = await authedFetch(`${baseUrl}/reminders/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(edit),
+  });
+  return (await readJsonOrThrow(res, "編輯提醒")) as Reminder;
+}
+
 export async function promoteReminderToTask(
   baseUrl: string,
   reminderId: string,
