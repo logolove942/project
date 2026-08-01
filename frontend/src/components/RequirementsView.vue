@@ -131,11 +131,16 @@ async function submitNewSpec() {
   }
 }
 
-// 完成的需求收合進獨立區塊，永久可查（不像看板任務只留當天，見 CONTEXT 討論）；
+// 完成/已取消的需求各自收合進獨立區塊，永久可查（不像看板任務只留當天，見 CONTEXT 討論）；
+// 取消是軟刪除（ADR-0004），改回其他狀態即等於復原，不需要額外的復原限制。
 // 規格完成與否只用狀態標籤呈現，不額外收合（規格本來就是巢狀的次要層級）。
-const activeRequirements = computed(() => requirements.value.filter((r) => r.status !== "完成"));
+const activeRequirements = computed(() =>
+  requirements.value.filter((r) => r.status !== "完成" && r.status !== "已取消"),
+);
 const completedRequirements = computed(() => requirements.value.filter((r) => r.status === "完成"));
+const cancelledRequirements = computed(() => requirements.value.filter((r) => r.status === "已取消"));
 const showCompleted = ref(false);
+const showCancelled = ref(false);
 
 // 需求/規格詳情彈窗：點標題檢視完整描述（Markdown 渲染），並可在裡面編輯。
 const detailTarget = ref<{ kind: "requirement" | "spec"; id: string } | null>(null);
@@ -364,6 +369,56 @@ defineExpose({ reload: load });
                     <span v-if="spec.status === '完成'" class="spec-check">✓</span>
                     {{ spec.title }}
                   </button>
+                </div>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+
+      <div v-if="cancelledRequirements.length" class="completed-section">
+        <button
+          type="button"
+          class="completed-toggle"
+          data-testid="cancelled-requirements-toggle"
+          @click="showCancelled = !showCancelled"
+        >
+          {{ showCancelled ? "▾" : "▸" }} 已取消需求（{{ cancelledRequirements.length }}）
+        </button>
+        <ul v-if="showCancelled" class="requirement-list" data-testid="cancelled-requirement-list">
+          <li
+            v-for="requirement in cancelledRequirements"
+            :key="requirement.id"
+            class="requirement-row requirement-row-done"
+            :data-testid="`requirement-${requirement.id}`"
+          >
+            <button
+              type="button"
+              class="requirement-title"
+              :data-testid="`requirement-title-${requirement.id}`"
+              @click="openRequirementDetail(requirement.id)"
+            >
+              {{ requirement.title }}
+            </button>
+            <ul v-if="requirement.specs.length" class="spec-list">
+              <li v-for="spec in requirement.specs" :key="spec.id" :data-testid="`spec-${spec.id}`">
+                <div class="spec-row">
+                  <button
+                    type="button"
+                    class="spec-title"
+                    :class="{ 'spec-done': spec.status === '完成' }"
+                    :data-testid="`spec-title-${spec.id}`"
+                    @click="openSpecDetail(spec.id)"
+                  >
+                    <span v-if="spec.status === '完成'" class="spec-check">✓</span>
+                    {{ spec.title }}
+                  </button>
+                  <span
+                    v-if="spec.status !== '完成'"
+                    class="spec-status-badge"
+                    :data-testid="`spec-status-${spec.id}`"
+                    >{{ spec.status }}</span
+                  >
                 </div>
               </li>
             </ul>

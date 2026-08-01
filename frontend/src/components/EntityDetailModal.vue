@@ -4,7 +4,7 @@ import type { TaskStatus } from "../types";
 import Modal from "./Modal.vue";
 import RichTextEditor from "./RichTextEditor.vue";
 
-const STATUS_OPTIONS: TaskStatus[] = ["待處理", "進行中", "暫停", "完成"];
+const STATUS_OPTIONS: TaskStatus[] = ["待處理", "進行中", "暫停", "完成", "已取消"];
 
 // 需求/規格共用的詳情彈窗：檢視完整描述（Markdown 渲染）＋編輯標題/描述/狀態。
 // 建立限管理職，但編輯開放給任何登入帳號（見 CONTEXT 討論），所以這裡不做角色判斷。

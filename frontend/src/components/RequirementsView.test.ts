@@ -155,6 +155,54 @@ describe("RequirementsView - 需求/規格管理", () => {
     expect(wrapper.find(`[data-testid="requirement-${requirement.id}"]`).exists()).toBe(false);
   });
 
+  it("collapses cancelled requirements into a separate, collapsed-by-default section (issue #56)", async () => {
+    const active = service.createRequirement("進行中的需求", "測試描述");
+    const cancelled = service.createRequirement("已取消的需求", "測試描述");
+    service.setRequirementStatus(cancelled.id, "已取消");
+
+    wrapper = mount(RequirementsView, {
+      props: { apiBaseUrl: baseUrl, currentAccount },
+      global: { stubs: { teleport: true } },
+    });
+    await waitFor(() => !wrapper!.find('[data-testid="requirements-loading"]').exists());
+
+    expect(wrapper.find(`[data-testid="requirement-${active.id}"]`).exists()).toBe(true);
+    expect(wrapper.find(`[data-testid="requirement-${cancelled.id}"]`).exists()).toBe(false);
+    expect(wrapper.find('[data-testid="cancelled-requirements-toggle"]').text()).toContain("1");
+
+    await wrapper.find('[data-testid="cancelled-requirements-toggle"]').trigger("click");
+    expect(wrapper.find(`[data-testid="requirement-${cancelled.id}"]`).text()).toContain("已取消的需求");
+  });
+
+  it("marks a requirement 已取消 through the detail modal's status field, then restores it by changing status again (issue #56)", async () => {
+    const requirement = service.createRequirement("需求A", "測試描述");
+
+    wrapper = mount(RequirementsView, {
+      props: { apiBaseUrl: baseUrl, currentAccount },
+      global: { stubs: { teleport: true } },
+    });
+    await waitFor(() => !wrapper!.find('[data-testid="requirements-loading"]').exists());
+
+    await wrapper.find(`[data-testid="requirement-title-${requirement.id}"]`).trigger("click");
+    await wrapper.find('[data-testid="entity-detail-edit-btn"]').trigger("click");
+    await wrapper.find('[data-testid="entity-detail-edit-status"]').setValue("已取消");
+    await wrapper.find('[data-testid="entity-detail-edit-form"]').trigger("submit");
+
+    await waitFor(() => service.getRequirement(requirement.id).status === "已取消");
+    await waitFor(() => wrapper!.find('[data-testid="cancelled-requirements-toggle"]').exists());
+    expect(wrapper.find(`[data-testid="requirement-${requirement.id}"]`).exists()).toBe(false);
+
+    // 復原就是改回其他狀態，沒有額外的復原限制或專屬按鈕（ADR-0004、issue #56）。
+    await wrapper.find('[data-testid="cancelled-requirements-toggle"]').trigger("click");
+    await wrapper.find(`[data-testid="requirement-title-${requirement.id}"]`).trigger("click");
+    await wrapper.find('[data-testid="entity-detail-edit-btn"]').trigger("click");
+    await wrapper.find('[data-testid="entity-detail-edit-status"]').setValue("待處理");
+    await wrapper.find('[data-testid="entity-detail-edit-form"]').trigger("submit");
+
+    await waitFor(() => service.getRequirement(requirement.id).status === "待處理");
+    await waitFor(() => wrapper!.find(`[data-testid="requirement-${requirement.id}"]`).exists());
+  });
+
   // issue #51：非管理職看不到任何新增需求/規格/任務的按鈕。
   it("hides the create-requirement form for a 一般同仁 account and shows a read-only note instead", async () => {
     const requirement = service.createRequirement("需求A", "測試描述");

@@ -63,6 +63,15 @@ describe("RequirementsView - 展開需求下的規格＋新增規格＋新增任
     expect(wrapper!.find(`[data-testid="spec-title-${spec.id}"]`).text()).toContain("✓");
   });
 
+  it("shows the 已取消 status badge on a cancelled spec (issue #56)", async () => {
+    const spec = service.createSpec(requirementId, "規格A-1", "測試描述");
+    service.setSpecStatus(spec.id, "已取消");
+    await mountAndWait();
+    await waitFor(() => wrapper!.find(`[data-testid="spec-${spec.id}"]`).exists());
+
+    expect(wrapper!.find(`[data-testid="spec-status-${spec.id}"]`).text()).toBe("已取消");
+  });
+
   it("shows an inline error when submitting a spec without a title", async () => {
     await mountAndWait();
 
